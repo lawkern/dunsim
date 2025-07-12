@@ -1,7 +1,36 @@
 /* (c) copyright 2025 Lawrence D. Kern /////////////////////////////////////// */
 
 #include "SDL3/SDL.h"
-#include "game.h"
+#include "game.c"
+
+READ_ENTIRE_FILE(Read_Entire_File)
+{
+   string Result = {0};
+
+   size_t Size = 0;
+   void *Data = SDL_LoadFile(Path, &Size);
+   if(Data && Size)
+   {
+      Result.Data = Allocate(Arena, u8, Size + 1);
+      if(Result.Data)
+      {
+         SDL_memcpy(Result.Data, Data, Size + 1);
+         Result.Length = Size;
+      }
+      else
+      {
+         SDL_Log("Failed to allocate for contents of file: %s", Path);
+      }
+
+      SDL_free(Data);
+   }
+   else
+   {
+      SDL_Log("Failed to read file: %s", Path);
+   }
+
+   return(Result);
+}
 
 static struct {
    SDL_Window *Window;
@@ -95,9 +124,9 @@ int main(void)
 
    // Initialize game.
    game_memory Memory = {0};
-   Memory.Size = 64 * 1024 * 1024;
-   Memory.Data = SDL_calloc(1, Memory.Size);
-   SDL_assert(Memory.Data);
+   Memory.Size = Megabytes(256);
+   Memory.Base = SDL_calloc(1, Memory.Size);
+   SDL_assert(Memory.Base);
 
    game_texture Backbuffer = {0};
    Backbuffer.Width = Texture_Width;
@@ -129,33 +158,36 @@ int main(void)
                game_controller *Keyboard = Input->Controllers + 0;
                Keyboard->Connected = true;
 
-               bool Pressed = Event.key.down;
-               switch(Event.key.key)
+               if(!Event.key.repeat)
                {
-                  case SDLK_ESCAPE: {
-                     Running = false;
-                  } break;
+                  bool Pressed = Event.key.down;
+                  switch(Event.key.key)
+                  {
+                     case SDLK_ESCAPE: {
+                        Running = false;
+                     } break;
 
-                  case SDLK_F: {
-                     if(Pressed)
-                     {
-                        bool Is_Fullscreen = (SDL_GetWindowFlags(Sdl.Window) & SDL_WINDOW_FULLSCREEN);
-                        SDL_SetWindowFullscreen(Sdl.Window, Is_Fullscreen ? 0 : SDL_WINDOW_FULLSCREEN);
-                     }
-                  } break;
+                     case SDLK_F: {
+                        if(Pressed)
+                        {
+                           bool Is_Fullscreen = (SDL_GetWindowFlags(Sdl.Window) & SDL_WINDOW_FULLSCREEN);
+                           SDL_SetWindowFullscreen(Sdl.Window, Is_Fullscreen ? 0 : SDL_WINDOW_FULLSCREEN);
+                        }
+                     } break;
 
-                  case SDLK_I:         {Sdl_Process_Button(&Keyboard->Action_Up, Pressed);} break;
-                  case SDLK_K:         {Sdl_Process_Button(&Keyboard->Action_Down, Pressed);} break;
-                  case SDLK_J:         {Sdl_Process_Button(&Keyboard->Action_Left, Pressed);} break;
-                  case SDLK_L:         {Sdl_Process_Button(&Keyboard->Action_Right, Pressed);} break;
-                  case SDLK_W:         {Sdl_Process_Button(&Keyboard->Move_Up, Pressed);} break;
-                  case SDLK_S:         {Sdl_Process_Button(&Keyboard->Move_Down, Pressed);} break;
-                  case SDLK_A:         {Sdl_Process_Button(&Keyboard->Move_Left, Pressed);} break;
-                  case SDLK_D:         {Sdl_Process_Button(&Keyboard->Move_Right, Pressed);} break;
-                  case SDLK_Q:         {Sdl_Process_Button(&Keyboard->Shoulder_Left, Pressed);} break;
-                  case SDLK_E:         {Sdl_Process_Button(&Keyboard->Shoulder_Right, Pressed);} break;
-                  case SDLK_SPACE:     {Sdl_Process_Button(&Keyboard->Start, Pressed);} break;
-                  case SDLK_BACKSPACE: {Sdl_Process_Button(&Keyboard->Back, Pressed);} break;
+                     case SDLK_I:         {Sdl_Process_Button(&Keyboard->Action_Up, Pressed);} break;
+                     case SDLK_K:         {Sdl_Process_Button(&Keyboard->Action_Down, Pressed);} break;
+                     case SDLK_J:         {Sdl_Process_Button(&Keyboard->Action_Left, Pressed);} break;
+                     case SDLK_L:         {Sdl_Process_Button(&Keyboard->Action_Right, Pressed);} break;
+                     case SDLK_W:         {Sdl_Process_Button(&Keyboard->Move_Up, Pressed);} break;
+                     case SDLK_S:         {Sdl_Process_Button(&Keyboard->Move_Down, Pressed);} break;
+                     case SDLK_A:         {Sdl_Process_Button(&Keyboard->Move_Left, Pressed);} break;
+                     case SDLK_D:         {Sdl_Process_Button(&Keyboard->Move_Right, Pressed);} break;
+                     case SDLK_Q:         {Sdl_Process_Button(&Keyboard->Shoulder_Left, Pressed);} break;
+                     case SDLK_E:         {Sdl_Process_Button(&Keyboard->Shoulder_Right, Pressed);} break;
+                     case SDLK_SPACE:     {Sdl_Process_Button(&Keyboard->Start, Pressed);} break;
+                     case SDLK_BACKSPACE: {Sdl_Process_Button(&Keyboard->Back, Pressed);} break;
+                  }
                }
             } break;
 
@@ -197,11 +229,11 @@ int main(void)
                         if(Sdl.Gamepads[Gamepad_Index])
                         {
                            Input->Controllers[Gamepad_Index].Connected = true;
-                           SDL_Log("Gamepad added to slot %d\n", Gamepad_Index);
+                           SDL_Log("Gamepad added to slot %d.", Gamepad_Index);
                         }
                         else
                         {
-                           SDL_Log("Failed to add gamepad: %s\n", SDL_GetError());
+                           SDL_Log("Failed to add gamepad: %s.", SDL_GetError());
                         }
 
                         break;
@@ -228,7 +260,7 @@ int main(void)
                   Sdl.Gamepads[Gamepad_Index] = 0;
                   Input->Controllers[Gamepad_Index].Connected = false;
 
-                  SDL_Log("Gamepad removed from slot %d\n", Gamepad_Index);
+                  SDL_Log("Gamepad removed from slot %d.", Gamepad_Index);
                }
                else
                {
@@ -271,6 +303,8 @@ int main(void)
       SDL_RenderPresent(Sdl.Renderer);
 
       // End of frame.
+      Input_Index++;
+      if(Input_Index == Array_Count(Inputs)) Input_Index = 0;
       game_input *Next_Input = Inputs + Input_Index;
       *Next_Input = *Input;
       for(int Controller_Index = 0; Controller_Index < GAME_CONTROLLER_COUNT; ++Controller_Index)
@@ -304,14 +338,14 @@ int main(void)
       Sdl.Actual_Frame_Seconds = Actual_Frame_Seconds;
       Sdl.Frame_Count++;
 
-#if DEBUG
+#     if DEBUG && 0
       int FPS = (int)(Sdl.Monitor_Refresh_Rate + 0.5f);
       if((Sdl.Frame_Count % FPS) == 0)
       {
          float Frame_ms = Sdl.Actual_Frame_Seconds * 1000.0f;
-         SDL_Log("Frame time: % .3fms (slept %dms)\n", Frame_ms, Sleep_ms);
+         SDL_Log("Frame time: % .3fms (slept %dms)", Frame_ms, Sleep_ms);
       }
-#endif
+#     endif
    }
 
    return(0);

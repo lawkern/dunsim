@@ -1,7 +1,5 @@
 /* (c) copyright 2025 Lawrence D. Kern /////////////////////////////////////// */
 
-#define GAME_TITLE "dunsim"
-
 #include <stdint.h>
 typedef uint8_t u8;
 typedef uint16_t u16;
@@ -11,20 +9,59 @@ typedef uint64_t u64;
 #include <stddef.h>
 typedef ptrdiff_t size;
 
-#define Array_Count(Array) (size)(sizeof(Array) / sizeof((Array)[0]))
-#define Assert(Cond) do { if(!(Cond)) { __builtin_unreachable(); } } while(0)
-#define Minimum(A, B) ((A) < (B) ? (A) : (B))
-#define Maximum(A, B) ((A) > (B) ? (A) : (B))
+typedef struct {
+   size Length;
+   u8 *Data;
+} string;
+
+#define S(Chars) (string){sizeof(Chars)-1, (u8 *)Chars}
 
 typedef struct {
    size Size;
-   u8 *Data;
+   size Used;
+   u8 *Base;
+} arena;
+
+#define Assert(Cond) do { if(!(Cond)) { __builtin_trap(); } } while(0)
+#define Array_Count(Array) (size)(sizeof(Array) / sizeof((Array)[0]))
+
+#define Minimum(A, B) ((A) < (B) ? (A) : (B))
+#define Maximum(A, B) ((A) > (B) ? (A) : (B))
+
+#define Kilobytes(N) (1024 * (N))
+#define Megabytes(N) (1024 * Kilobytes(N))
+#define Gigabytes(N) (1024 * Megabytes(N))
+
+#define Allocate(Arena, type, Count) (type *)Allocate_Size((Arena), (Count)*sizeof(type))
+
+static void *Allocate_Size(arena *Arena, size Size)
+{
+   void *Result = 0;
+   if((Arena->Size - Arena->Used) >= Size)
+   {
+      Result = Arena->Base + Arena->Used;
+      Arena->Used += Size;
+   }
+   else
+   {
+      Assert(0);
+   }
+
+   return(Result);
+}
+
+typedef struct {
+   size Size;
+   u8 *Base;
 } game_memory;
 
 typedef struct {
    int Width;
    int Height;
    u32 *Memory;
+
+   int Offset_X;
+   int Offset_Y;
 } game_texture;
 
 typedef struct {
@@ -99,3 +136,7 @@ static inline bool Was_Released(game_button Button)
 // Game API:
 #define UPDATE(Name) void Name(game_memory Memory, game_texture Backbuffer, game_input *Input)
 UPDATE(Update);
+
+// Platform API:
+#define READ_ENTIRE_FILE(Name) string Name(arena *Arena, char *Path)
+READ_ENTIRE_FILE(Read_Entire_File);
