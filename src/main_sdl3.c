@@ -7,13 +7,13 @@ static struct {
    SDL_Window *Window;
    SDL_Renderer *Renderer;
    SDL_Texture *Texture;
-   SDL_Gamepad *Controllers[GAME_CONTROLLER_COUNT];
+   SDL_Gamepad *Gamepads[GAME_CONTROLLER_COUNT];
 
    Uint64 Frequency;
    Uint64 Frame_Start;
    Uint64 Frame_Count;
 
-   int Monitor_Refresh_Rate;
+   float Monitor_Refresh_Rate;
    float Target_Frame_Seconds;
    float Actual_Frame_Seconds;
 } Sdl;
@@ -24,71 +24,30 @@ static void Sdl_Process_Button(game_button *Button, bool Pressed)
    Button->Transitioned = true;
 }
 
-static int Sdl_Get_Controller_Index(SDL_JoystickID ID)
+static int Sdl_Get_Gamepad_Index(SDL_JoystickID ID)
 {
-   int Result = -1;
-
-   for(int Controller_Index = 0; Controller_Index < GAME_CONTROLLER_COUNT; ++Controller_Index)
+   int Result = 0;
+   for(int Gamepad_Index = 1; Gamepad_Index < GAME_CONTROLLER_COUNT; ++Gamepad_Index)
    {
-      SDL_Gamepad *Test = Sdl.Controllers[Controller_Index];
-      if(Test)
+      SDL_Gamepad *Gamepad = Sdl.Gamepads[Gamepad_Index];
+      if(Gamepad)
       {
-         SDL_Joystick *Joystick = SDL_GetGamepadJoystick(Test);
+         SDL_Joystick *Joystick = SDL_GetGamepadJoystick(Gamepad);
          if(ID == SDL_GetJoystickID(Joystick))
          {
-            Result = Controller_Index;
+            Result = Gamepad_Index;
             break;
          }
       }
    }
-
-   return(Result);
-}
-
-static int Sdl_Get_Monitor_Refresh_Rate(void)
-{
-   int Result = 60;
-
-   int Display_Count;
-   SDL_DisplayID *Displays = SDL_GetDisplays(&Display_Count);
-   if(Displays)
-   {
-      for(int Display_Index = 0; Display_Index < Display_Count; ++Display_Index)
-      {
-         SDL_DisplayID ID = Displays[Display_Index];
-         if(ID)
-         {
-            // TODO: Determine which display to use when Display_Count > 1.
-            const SDL_DisplayMode *Mode = SDL_GetDesktopDisplayMode(ID);
-            if(Mode)
-            {
-               if(Mode->refresh_rate > 0)
-               {
-                  Result = Mode->refresh_rate;
-                  break;
-               }
-            }
-            else
-            {
-               SDL_Log("Failed to get desktop display mode: %s", SDL_GetError());
-            }
-         }
-      }
-      SDL_free(Displays);
-   }
-   else
-   {
-      SDL_Log("Failed to count desktop displays: %s", SDL_GetError());
-   }
-
    return(Result);
 }
 
 int main(void)
 {
-   // Initialization.
-   int Width = 420;
-   int Height = 360;
+   // Initialize SDL.
+   int Window_Width = 640;
+   int Window_Height = 480;
 
    if(!SDL_Init(SDL_INIT_VIDEO|SDL_INIT_GAMEPAD))
    {
@@ -96,7 +55,7 @@ int main(void)
       SDL_assert(0);
    }
 
-   if(!SDL_CreateWindowAndRenderer("SDL Window", Width, Height, 0, &Sdl.Window, &Sdl.Renderer))
+   if(!SDL_CreateWindowAndRenderer("SDL Platform Build", Window_Width, Window_Height, 0, &Sdl.Window, &Sdl.Renderer))
    {
       SDL_Log("Failed to create window/renderer: %s", SDL_GetError());
       SDL_assert(0);
@@ -107,7 +66,15 @@ int main(void)
       SDL_Log("Failed to set vsync: %s", SDL_GetError());
    }
 
-   Sdl.Texture = SDL_CreateTexture(Sdl.Renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, Width, Height);
+   int Texture_Width, Texture_Height;
+   if(!SDL_GetWindowSizeInPixels(Sdl.Window, &Texture_Width, &Texture_Height))
+   {
+      SDL_Log("Failed to get window size: %s", SDL_GetError());
+      Texture_Width = Window_Width;
+      Texture_Height = Window_Height;
+   }
+
+   Sdl.Texture = SDL_CreateTexture(Sdl.Renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, Texture_Width, Texture_Height);
    if(!Sdl.Texture)
    {
       SDL_Log("Failed to create SDL texture: %s", SDL_GetError());
@@ -115,16 +82,27 @@ int main(void)
    }
 
    Sdl.Frequency = SDL_GetPerformanceFrequency();
-   Sdl.Monitor_Refresh_Rate = Sdl_Get_Monitor_Refresh_Rate();
+
+   int Display_ID = SDL_GetDisplayForWindow(Sdl.Window);
+   const SDL_DisplayMode *Display_Mode = SDL_GetCurrentDisplayMode(Display_ID);
+   Sdl.Monitor_Refresh_Rate = (Display_Mode && Display_Mode->refresh_rate > 0)
+      ? Display_Mode->refresh_rate
+      : 60.0f;
    Sdl.Target_Frame_Seconds = 1.0f / Sdl.Monitor_Refresh_Rate;
 
-   SDL_Log("Monitor refresh rate: %d", Sdl.Monitor_Refresh_Rate);
+   SDL_Log("Monitor refresh rate: %02f", Sdl.Monitor_Refresh_Rate);
    SDL_Log("Target frame time: %0.03fms", Sdl.Target_Frame_Seconds * 1000.0f);
 
+   // Initialize game.
+   game_memory Memory = {0};
+   Memory.Size = 64 * 1024 * 1024;
+   Memory.Data = SDL_calloc(1, Memory.Size);
+   SDL_assert(Memory.Data);
+
    game_texture Backbuffer = {0};
-   Backbuffer.Width = Width;
-   Backbuffer.Height = Height;
-   Backbuffer.Memory = SDL_calloc(Backbuffer.Width*Backbuffer.Height, sizeof(*Backbuffer.Memory));
+   Backbuffer.Width = Texture_Width;
+   Backbuffer.Height = Texture_Height;
+   Backbuffer.Memory = SDL_calloc(Texture_Width*Texture_Height, sizeof(*Backbuffer.Memory));
    SDL_assert(Backbuffer.Memory);
 
    int Input_Index = 0;
@@ -149,6 +127,7 @@ int main(void)
             case SDL_EVENT_KEY_UP:
             case SDL_EVENT_KEY_DOWN: {
                game_controller *Keyboard = Input->Controllers + 0;
+               Keyboard->Connected = true;
 
                bool Pressed = Event.key.down;
                switch(Event.key.key)
@@ -182,77 +161,85 @@ int main(void)
 
             case SDL_EVENT_GAMEPAD_BUTTON_UP:
             case SDL_EVENT_GAMEPAD_BUTTON_DOWN: {
-               int Controller_Index = Sdl_Get_Controller_Index(Event.gdevice.which);
-               if(Controller_Index >= 0)
+               int Gamepad_Index = Sdl_Get_Gamepad_Index(Event.gdevice.which);
+               SDL_assert(Gamepad_Index > 0);
+               SDL_assert(Gamepad_Index < GAME_CONTROLLER_COUNT);
+
+               game_controller *Controller = Input->Controllers + Gamepad_Index;
+               bool Pressed = Event.gbutton.down;
+               switch(Event.gbutton.button)
                {
-                  game_controller *Controller = Input->Controllers + Controller_Index;
-                  bool Pressed = Event.gbutton.down;
-                  switch(Event.gbutton.button)
-                  {
-                     // TODO: Confirm if other controllers map buttons on based name or position.
-                     case SDL_GAMEPAD_BUTTON_SOUTH:          {Sdl_Process_Button(&Controller->Action_Down, Pressed);} break;
-                     case SDL_GAMEPAD_BUTTON_EAST:           {Sdl_Process_Button(&Controller->Action_Right, Pressed);} break;
-                     case SDL_GAMEPAD_BUTTON_WEST:           {Sdl_Process_Button(&Controller->Action_Left, Pressed);} break;
-                     case SDL_GAMEPAD_BUTTON_NORTH:          {Sdl_Process_Button(&Controller->Action_Up, Pressed);} break;
-                     case SDL_GAMEPAD_BUTTON_DPAD_UP:        {Sdl_Process_Button(&Controller->Move_Up, Pressed);} break;
-                     case SDL_GAMEPAD_BUTTON_DPAD_DOWN:      {Sdl_Process_Button(&Controller->Move_Down, Pressed);} break;
-                     case SDL_GAMEPAD_BUTTON_DPAD_LEFT:      {Sdl_Process_Button(&Controller->Move_Left, Pressed);} break;
-                     case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:     {Sdl_Process_Button(&Controller->Move_Right, Pressed);} break;
-                     case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER:  {Sdl_Process_Button(&Controller->Shoulder_Left, Pressed);} break;
-                     case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: {Sdl_Process_Button(&Controller->Shoulder_Right, Pressed);} break;
-                     case SDL_GAMEPAD_BUTTON_START:          {Sdl_Process_Button(&Controller->Start, Pressed);} break;
-                     case SDL_GAMEPAD_BUTTON_BACK:           {Sdl_Process_Button(&Controller->Back, Pressed);} break;
-                  }
+                  // TODO: Confirm if other controllers map buttons on based name or position.
+                  case SDL_GAMEPAD_BUTTON_SOUTH:          {Sdl_Process_Button(&Controller->Action_Down, Pressed);} break;
+                  case SDL_GAMEPAD_BUTTON_EAST:           {Sdl_Process_Button(&Controller->Action_Right, Pressed);} break;
+                  case SDL_GAMEPAD_BUTTON_WEST:           {Sdl_Process_Button(&Controller->Action_Left, Pressed);} break;
+                  case SDL_GAMEPAD_BUTTON_NORTH:          {Sdl_Process_Button(&Controller->Action_Up, Pressed);} break;
+                  case SDL_GAMEPAD_BUTTON_DPAD_UP:        {Sdl_Process_Button(&Controller->Move_Up, Pressed);} break;
+                  case SDL_GAMEPAD_BUTTON_DPAD_DOWN:      {Sdl_Process_Button(&Controller->Move_Down, Pressed);} break;
+                  case SDL_GAMEPAD_BUTTON_DPAD_LEFT:      {Sdl_Process_Button(&Controller->Move_Left, Pressed);} break;
+                  case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:     {Sdl_Process_Button(&Controller->Move_Right, Pressed);} break;
+                  case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER:  {Sdl_Process_Button(&Controller->Shoulder_Left, Pressed);} break;
+                  case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: {Sdl_Process_Button(&Controller->Shoulder_Right, Pressed);} break;
+                  case SDL_GAMEPAD_BUTTON_START:          {Sdl_Process_Button(&Controller->Start, Pressed);} break;
+                  case SDL_GAMEPAD_BUTTON_BACK:           {Sdl_Process_Button(&Controller->Back, Pressed);} break;
                }
             } break;
 
             case SDL_EVENT_GAMEPAD_ADDED: {
-               // NOTE: Find the first available controller slot and store the controller
-               // pointer. The indices for Sdl.Controllers and Input->Controllers must be
-               // manually maintained.
-
-               for(int Controller_Index = 0; Controller_Index < GAME_CONTROLLER_COUNT; ++Controller_Index)
+               SDL_JoystickID ID = Event.gdevice.which;
+               if(SDL_IsGamepad(ID))
                {
-                  if(Sdl.Controllers[Controller_Index] == 0 && SDL_IsGamepad(Controller_Index))
+                  for(int Gamepad_Index = 1; Gamepad_Index < GAME_CONTROLLER_COUNT; ++Gamepad_Index)
                   {
-                     Sdl.Controllers[Controller_Index] = SDL_OpenGamepad(Controller_Index);
-                     if(Sdl.Controllers[Controller_Index])
+                     if(!Sdl.Gamepads[Gamepad_Index])
                      {
-                        Input->Controllers[Controller_Index].Connected = true;
-                        SDL_Log("Controller added at slot %d\n", Controller_Index);
-                     }
-                     else
-                     {
-                        SDL_Log("Failed to open gamepad: %s\n", SDL_GetError());
-                     }
+                        Sdl.Gamepads[Gamepad_Index] = SDL_OpenGamepad(ID);
+                        if(Sdl.Gamepads[Gamepad_Index])
+                        {
+                           Input->Controllers[Gamepad_Index].Connected = true;
+                           SDL_Log("Gamepad added to slot %d\n", Gamepad_Index);
+                        }
+                        else
+                        {
+                           SDL_Log("Failed to add gamepad: %s\n", SDL_GetError());
+                        }
 
-                     // TODO: Should we only break on success? Look into what types of
-                     // errors are actually caught here.
-                     break;
+                        break;
+                     }
                   }
+               }
+               else
+               {
+                  SDL_Log("This joystick is not supported by SDL's gamepad interface.");
                }
             } break;
 
             case SDL_EVENT_GAMEPAD_REMOVED: {
-               int Controller_Index = Sdl_Get_Controller_Index(Event.cdevice.which);
-               if(Controller_Index >= 0)
+               SDL_JoystickID ID = Event.gdevice.which;
+               if(SDL_IsGamepad(ID))
                {
-                  SDL_assert(Controller_Index < GAME_CONTROLLER_COUNT);
-                  SDL_assert(Sdl.Controllers[Controller_Index]);
+                  int Gamepad_Index = Sdl_Get_Gamepad_Index(ID);
+                  SDL_assert(Gamepad_Index > 0);
+                  SDL_assert(Gamepad_Index < GAME_CONTROLLER_COUNT);
+                  SDL_assert(Sdl.Gamepads[Gamepad_Index]);
 
-                  SDL_CloseGamepad(Sdl.Controllers[Controller_Index]);
+                  SDL_CloseGamepad(Sdl.Gamepads[Gamepad_Index]);
 
-                  Sdl.Controllers[Controller_Index] = 0;
-                  Input->Controllers[Controller_Index].Connected = false;
+                  Sdl.Gamepads[Gamepad_Index] = 0;
+                  Input->Controllers[Gamepad_Index].Connected = false;
 
-                  SDL_Log("Controller removed from slot %d\n", Controller_Index);
+                  SDL_Log("Gamepad removed from slot %d\n", Gamepad_Index);
+               }
+               else
+               {
+                  SDL_Log("This joystick is not supported by SDL's gamepad interface.");
                }
             } break;
          }
       }
 
       // Update game state.
-      Update(&Backbuffer, Input);
+      Update(Memory, Backbuffer, Input);
 
       // Render frame.
       SDL_SetRenderDrawColor(Sdl.Renderer, 0, 0, 0, 255);
@@ -261,7 +248,7 @@ int main(void)
       int Dst_Width, Dst_Height;
       SDL_GetCurrentRenderOutputSize(Sdl.Renderer, &Dst_Width, &Dst_Height);
 
-      float Src_Aspect = (float)Width / (float)Height;
+      float Src_Aspect = (float)Texture_Width / (float)Texture_Height;
       float Dst_Aspect = (float)Dst_Width / (float)Dst_Height;
       SDL_FRect Dst_Rect = {0, 0, (float)Dst_Width, (float)Dst_Height};
       if(Src_Aspect > Dst_Aspect)
@@ -317,11 +304,14 @@ int main(void)
       Sdl.Actual_Frame_Seconds = Actual_Frame_Seconds;
       Sdl.Frame_Count++;
 
-      if((Sdl.Frame_Count % Sdl.Monitor_Refresh_Rate) == 0)
+#if DEBUG
+      int FPS = (int)(Sdl.Monitor_Refresh_Rate + 0.5f);
+      if((Sdl.Frame_Count % FPS) == 0)
       {
          float Frame_ms = Sdl.Actual_Frame_Seconds * 1000.0f;
          SDL_Log("Frame time: % .3fms (slept %dms)\n", Frame_ms, Sleep_ms);
       }
+#endif
    }
 
    return(0);

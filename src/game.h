@@ -3,6 +3,8 @@
 #define GAME_TITLE "dunsim"
 
 #include <stdint.h>
+typedef uint8_t u8;
+typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 
@@ -10,6 +12,14 @@ typedef uint64_t u64;
 typedef ptrdiff_t size;
 
 #define Array_Count(Array) (size)(sizeof(Array) / sizeof((Array)[0]))
+#define Assert(Cond) do { if(!(Cond)) { __builtin_unreachable(); } } while(0)
+#define Minimum(A, B) ((A) < (B) ? (A) : (B))
+#define Maximum(A, B) ((A) > (B) ? (A) : (B))
+
+typedef struct {
+   size Size;
+   u8 *Data;
+} game_memory;
 
 typedef struct {
    int Width;
@@ -24,14 +34,14 @@ typedef struct {
 
 #define GAME_BUTTONS                            \
    X(Action_Up)                                 \
-   X(Action_Down)                               \
-   X(Action_Left)                               \
-   X(Action_Right)                              \
-   X(Move_Up)                                   \
-   X(Move_Down)                                 \
-   X(Move_Left)                                 \
-   X(Move_Right)                                \
-   X(Shoulder_Left)                             \
+      X(Action_Down)				\
+      X(Action_Left)				\
+      X(Action_Right)				\
+      X(Move_Up)				\
+      X(Move_Down)				\
+      X(Move_Left)				\
+      X(Move_Right)				\
+      X(Shoulder_Left)				\
    X(Shoulder_Right)                            \
    X(Start)                                     \
    X(Back)
@@ -59,7 +69,7 @@ typedef struct {
    bool Connected;
 } game_controller;
 
-#define GAME_CONTROLLER_COUNT 4
+#define GAME_CONTROLLER_COUNT (5) // 1 Keyboard + 4 Gamepads
 typedef struct {
    float Frame_Seconds;
    game_controller Controllers[GAME_CONTROLLER_COUNT];
@@ -87,5 +97,5 @@ static inline bool Was_Released(game_button Button)
 }
 
 // Game API:
-#define UPDATE(Name) void Name(game_texture *Backbuffer, game_input *Input)
+#define UPDATE(Name) void Name(game_memory Memory, game_texture Backbuffer, game_input *Input)
 UPDATE(Update);
