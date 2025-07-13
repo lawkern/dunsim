@@ -103,6 +103,16 @@ typedef struct {
       game_button Buttons[GAME_BUTTON_COUNT];
    };
 
+   // Range: -1.0f to 1.0f
+   float Stick_Left_X;
+   float Stick_Left_Y;
+   float Stick_Right_X;
+   float Stick_Right_Y;
+
+   // Range: 0.0f to 1.0f
+   float Trigger_Left;
+   float Trigger_Right;
+
    bool Connected;
 } game_controller;
 

@@ -53,6 +53,43 @@ static void Sdl_Process_Button(game_button *Button, bool Pressed)
    Button->Transitioned = true;
 }
 
+static float Sdl_Process_Stick(SDL_Gamepad *Gamepad, SDL_GamepadAxis Axis)
+{
+   float Result = 0.0f;
+
+   Sint16 Axis_State = SDL_GetGamepadAxis(Gamepad, Axis);
+   Sint16 Deadzone = 8000;
+
+   if(Axis_State > Deadzone)
+   {
+      Result = (float)(Axis_State - Deadzone) / (float)(SDL_JOYSTICK_AXIS_MAX - Deadzone);
+   }
+   else if(Axis_State < -Deadzone)
+   {
+      Result = -1.0f * (float)(Axis_State + Deadzone) / (float)(SDL_JOYSTICK_AXIS_MIN + Deadzone);
+   }
+
+   return(Result);
+}
+
+static float Sdl_Process_Trigger(SDL_Gamepad *Gamepad, SDL_GamepadAxis Axis)
+{
+   float Result = 0.0f;
+
+   // TODO: SDL's documentation doesn't indicate a preferred deadzone for
+   // triggers. The XBox Elite controller used for testing always reports an
+   // Axis_State of 1 while released. Test with more controllers.
+   Sint16 Deadzone = 50;
+
+   Sint16 Trigger_State  = SDL_GetGamepadAxis(Gamepad, Axis);
+   if(Trigger_State > Deadzone)
+   {
+      Result = (float)(Trigger_State - Deadzone) / (float)(SDL_JOYSTICK_AXIS_MAX - Deadzone);
+   }
+
+   return(Result);
+}
+
 static int Sdl_Get_Gamepad_Index(SDL_JoystickID ID)
 {
    int Result = 0;
@@ -272,6 +309,23 @@ int main(void)
                   SDL_Log("This joystick is not supported by SDL's gamepad interface.");
                }
             } break;
+         }
+      }
+
+      for(int Gamepad_Index = 1; Gamepad_Index < Array_Count(Input->Controllers); ++Gamepad_Index)
+      {
+         game_controller *Controller = Input->Controllers + Gamepad_Index;
+         if(Controller->Connected)
+         {
+            SDL_Gamepad *Gamepad = Sdl.Gamepads[Gamepad_Index];
+
+            Controller->Stick_Left_X  = Sdl_Process_Stick(Gamepad, SDL_GAMEPAD_AXIS_LEFTX);
+            Controller->Stick_Left_Y  = Sdl_Process_Stick(Gamepad, SDL_GAMEPAD_AXIS_LEFTY);
+            Controller->Stick_Right_X = Sdl_Process_Stick(Gamepad, SDL_GAMEPAD_AXIS_RIGHTX);
+            Controller->Stick_Right_Y = Sdl_Process_Stick(Gamepad, SDL_GAMEPAD_AXIS_RIGHTY);
+
+            Controller->Trigger_Left  = Sdl_Process_Trigger(Gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER);
+            Controller->Trigger_Right = Sdl_Process_Trigger(Gamepad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER);
          }
       }
 
