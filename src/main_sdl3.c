@@ -269,20 +269,30 @@ int main(void)
                {
                   if(Gamepad_Event.type == SDL_EVENT_GAMEPAD_ADDED)
                   {
-                     for(int Gamepad_Index = 1; Gamepad_Index < GAME_CONTROLLER_COUNT; ++Gamepad_Index)
+                     // TODO: SDL_EVENT_GAMEPAD_ADDED can fire multiple times
+                     // for a single controller (e.g. when plugged in after
+                     // initialization), so we need to check if ID corresponds
+                     // to a connected gamepad. Determine if we'd be better off
+                     // checking our own list, or if SDL_GetGamepadFromID is
+                     // fast enough.
+                     bool Is_Unconnected_Gamepad = (SDL_GetGamepadFromID(ID) == 0);
+                     if(Is_Unconnected_Gamepad)
                      {
-                        if(!Sdl.Gamepads[Gamepad_Index])
+                        for(int Gamepad_Index = 1; Gamepad_Index < GAME_CONTROLLER_COUNT; ++Gamepad_Index)
                         {
-                           Sdl.Gamepads[Gamepad_Index] = SDL_OpenGamepad(ID);
-                           if(Sdl.Gamepads[Gamepad_Index])
+                           if(!Sdl.Gamepads[Gamepad_Index])
                            {
-                              Input->Controllers[Gamepad_Index].Connected = true;
-                              SDL_Log("Gamepad added to slot %d.", Gamepad_Index);
+                              Sdl.Gamepads[Gamepad_Index] = SDL_OpenGamepad(ID);
+                              if(Sdl.Gamepads[Gamepad_Index])
+                              {
+                                 Input->Controllers[Gamepad_Index].Connected = true;
+                                 SDL_Log("Gamepad added to slot %d.", Gamepad_Index);
+                              }
+                              else
+                              {
+                                 SDL_Log("Failed to add gamepad: %s.", SDL_GetError());
+                              }
                               break;
-                           }
-                           else
-                           {
-                              SDL_Log("Failed to add gamepad: %s.", SDL_GetError());
                            }
                         }
                      }
