@@ -155,112 +155,117 @@ int main(void)
 
             case SDL_EVENT_KEY_UP:
             case SDL_EVENT_KEY_DOWN: {
+               SDL_KeyboardEvent Key_Event = Event.key;
+
                game_controller *Keyboard = Input->Controllers + 0;
                Keyboard->Connected = true;
 
-               if(!Event.key.repeat)
+               if(!Key_Event.repeat)
                {
-                  bool Pressed = Event.key.down;
-                  switch(Event.key.key)
+                  switch(Key_Event.key)
                   {
                      case SDLK_ESCAPE: {
                         Running = false;
                      } break;
 
-                     case SDLK_F: {
-                        if(Pressed)
+                     case SDLK_F:
+                     case SDLK_RETURN: {
+                        if(Key_Event.down)
                         {
-                           bool Is_Fullscreen = (SDL_GetWindowFlags(Sdl.Window) & SDL_WINDOW_FULLSCREEN);
-                           SDL_SetWindowFullscreen(Sdl.Window, Is_Fullscreen ? 0 : SDL_WINDOW_FULLSCREEN);
+                           if(Key_Event.key == SDLK_F || (Key_Event.mod & SDL_KMOD_ALT))
+                           {
+                              bool Is_Fullscreen = (SDL_GetWindowFlags(Sdl.Window) & SDL_WINDOW_FULLSCREEN);
+                              SDL_SetWindowFullscreen(Sdl.Window, Is_Fullscreen ? 0 : SDL_WINDOW_FULLSCREEN);
+                           }
                         }
                      } break;
 
-                     case SDLK_I:         {Sdl_Process_Button(&Keyboard->Action_Up, Pressed);} break;
-                     case SDLK_K:         {Sdl_Process_Button(&Keyboard->Action_Down, Pressed);} break;
-                     case SDLK_J:         {Sdl_Process_Button(&Keyboard->Action_Left, Pressed);} break;
-                     case SDLK_L:         {Sdl_Process_Button(&Keyboard->Action_Right, Pressed);} break;
-                     case SDLK_W:         {Sdl_Process_Button(&Keyboard->Move_Up, Pressed);} break;
-                     case SDLK_S:         {Sdl_Process_Button(&Keyboard->Move_Down, Pressed);} break;
-                     case SDLK_A:         {Sdl_Process_Button(&Keyboard->Move_Left, Pressed);} break;
-                     case SDLK_D:         {Sdl_Process_Button(&Keyboard->Move_Right, Pressed);} break;
-                     case SDLK_Q:         {Sdl_Process_Button(&Keyboard->Shoulder_Left, Pressed);} break;
-                     case SDLK_E:         {Sdl_Process_Button(&Keyboard->Shoulder_Right, Pressed);} break;
-                     case SDLK_SPACE:     {Sdl_Process_Button(&Keyboard->Start, Pressed);} break;
-                     case SDLK_BACKSPACE: {Sdl_Process_Button(&Keyboard->Back, Pressed);} break;
+                     case SDLK_I:         {Sdl_Process_Button(&Keyboard->Action_Up, Key_Event.down);} break;
+                     case SDLK_K:         {Sdl_Process_Button(&Keyboard->Action_Down, Key_Event.down);} break;
+                     case SDLK_J:         {Sdl_Process_Button(&Keyboard->Action_Left, Key_Event.down);} break;
+                     case SDLK_L:         {Sdl_Process_Button(&Keyboard->Action_Right, Key_Event.down);} break;
+                     case SDLK_W:         {Sdl_Process_Button(&Keyboard->Move_Up, Key_Event.down);} break;
+                     case SDLK_S:         {Sdl_Process_Button(&Keyboard->Move_Down, Key_Event.down);} break;
+                     case SDLK_A:         {Sdl_Process_Button(&Keyboard->Move_Left, Key_Event.down);} break;
+                     case SDLK_D:         {Sdl_Process_Button(&Keyboard->Move_Right, Key_Event.down);} break;
+                     case SDLK_Q:         {Sdl_Process_Button(&Keyboard->Shoulder_Left, Key_Event.down);} break;
+                     case SDLK_E:         {Sdl_Process_Button(&Keyboard->Shoulder_Right, Key_Event.down);} break;
+                     case SDLK_SPACE:     {Sdl_Process_Button(&Keyboard->Start, Key_Event.down);} break;
+                     case SDLK_BACKSPACE: {Sdl_Process_Button(&Keyboard->Back, Key_Event.down);} break;
                   }
                }
             } break;
 
             case SDL_EVENT_GAMEPAD_BUTTON_UP:
             case SDL_EVENT_GAMEPAD_BUTTON_DOWN: {
-               int Gamepad_Index = Sdl_Get_Gamepad_Index(Event.gdevice.which);
+               SDL_GamepadButtonEvent Button_Event = Event.gbutton;
+
+               int Gamepad_Index = Sdl_Get_Gamepad_Index(Button_Event.which);
                SDL_assert(Gamepad_Index > 0);
                SDL_assert(Gamepad_Index < GAME_CONTROLLER_COUNT);
 
                game_controller *Controller = Input->Controllers + Gamepad_Index;
-               bool Pressed = Event.gbutton.down;
-               switch(Event.gbutton.button)
+               switch(Button_Event.button)
                {
                   // TODO: Confirm if other controllers map buttons on based name or position.
-                  case SDL_GAMEPAD_BUTTON_SOUTH:          {Sdl_Process_Button(&Controller->Action_Down, Pressed);} break;
-                  case SDL_GAMEPAD_BUTTON_EAST:           {Sdl_Process_Button(&Controller->Action_Right, Pressed);} break;
-                  case SDL_GAMEPAD_BUTTON_WEST:           {Sdl_Process_Button(&Controller->Action_Left, Pressed);} break;
-                  case SDL_GAMEPAD_BUTTON_NORTH:          {Sdl_Process_Button(&Controller->Action_Up, Pressed);} break;
-                  case SDL_GAMEPAD_BUTTON_DPAD_UP:        {Sdl_Process_Button(&Controller->Move_Up, Pressed);} break;
-                  case SDL_GAMEPAD_BUTTON_DPAD_DOWN:      {Sdl_Process_Button(&Controller->Move_Down, Pressed);} break;
-                  case SDL_GAMEPAD_BUTTON_DPAD_LEFT:      {Sdl_Process_Button(&Controller->Move_Left, Pressed);} break;
-                  case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:     {Sdl_Process_Button(&Controller->Move_Right, Pressed);} break;
-                  case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER:  {Sdl_Process_Button(&Controller->Shoulder_Left, Pressed);} break;
-                  case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: {Sdl_Process_Button(&Controller->Shoulder_Right, Pressed);} break;
-                  case SDL_GAMEPAD_BUTTON_START:          {Sdl_Process_Button(&Controller->Start, Pressed);} break;
-                  case SDL_GAMEPAD_BUTTON_BACK:           {Sdl_Process_Button(&Controller->Back, Pressed);} break;
+                  case SDL_GAMEPAD_BUTTON_SOUTH:          {Sdl_Process_Button(&Controller->Action_Down, Button_Event.down);} break;
+                  case SDL_GAMEPAD_BUTTON_EAST:           {Sdl_Process_Button(&Controller->Action_Right, Button_Event.down);} break;
+                  case SDL_GAMEPAD_BUTTON_WEST:           {Sdl_Process_Button(&Controller->Action_Left, Button_Event.down);} break;
+                  case SDL_GAMEPAD_BUTTON_NORTH:          {Sdl_Process_Button(&Controller->Action_Up, Button_Event.down);} break;
+                  case SDL_GAMEPAD_BUTTON_DPAD_UP:        {Sdl_Process_Button(&Controller->Move_Up, Button_Event.down);} break;
+                  case SDL_GAMEPAD_BUTTON_DPAD_DOWN:      {Sdl_Process_Button(&Controller->Move_Down, Button_Event.down);} break;
+                  case SDL_GAMEPAD_BUTTON_DPAD_LEFT:      {Sdl_Process_Button(&Controller->Move_Left, Button_Event.down);} break;
+                  case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:     {Sdl_Process_Button(&Controller->Move_Right, Button_Event.down);} break;
+                  case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER:  {Sdl_Process_Button(&Controller->Shoulder_Left, Button_Event.down);} break;
+                  case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: {Sdl_Process_Button(&Controller->Shoulder_Right, Button_Event.down);} break;
+                  case SDL_GAMEPAD_BUTTON_START:          {Sdl_Process_Button(&Controller->Start, Button_Event.down);} break;
+                  case SDL_GAMEPAD_BUTTON_BACK:           {Sdl_Process_Button(&Controller->Back, Button_Event.down);} break;
                }
             } break;
 
-            case SDL_EVENT_GAMEPAD_ADDED: {
-               SDL_JoystickID ID = Event.gdevice.which;
+            case SDL_EVENT_GAMEPAD_ADDED:
+            case SDL_EVENT_GAMEPAD_REMOVED: {
+               SDL_GamepadDeviceEvent Gamepad_Event = Event.gdevice;
+
+               SDL_JoystickID ID = Gamepad_Event.which;
                if(SDL_IsGamepad(ID))
                {
-                  for(int Gamepad_Index = 1; Gamepad_Index < GAME_CONTROLLER_COUNT; ++Gamepad_Index)
+                  if(Gamepad_Event.type == SDL_EVENT_GAMEPAD_ADDED)
                   {
-                     if(!Sdl.Gamepads[Gamepad_Index])
+                     for(int Gamepad_Index = 1; Gamepad_Index < GAME_CONTROLLER_COUNT; ++Gamepad_Index)
                      {
-                        Sdl.Gamepads[Gamepad_Index] = SDL_OpenGamepad(ID);
-                        if(Sdl.Gamepads[Gamepad_Index])
+                        if(!Sdl.Gamepads[Gamepad_Index])
                         {
-                           Input->Controllers[Gamepad_Index].Connected = true;
-                           SDL_Log("Gamepad added to slot %d.", Gamepad_Index);
+                           Sdl.Gamepads[Gamepad_Index] = SDL_OpenGamepad(ID);
+                           if(Sdl.Gamepads[Gamepad_Index])
+                           {
+                              Input->Controllers[Gamepad_Index].Connected = true;
+                              SDL_Log("Gamepad added to slot %d.", Gamepad_Index);
+                              break;
+                           }
+                           else
+                           {
+                              SDL_Log("Failed to add gamepad: %s.", SDL_GetError());
+                           }
                         }
-                        else
-                        {
-                           SDL_Log("Failed to add gamepad: %s.", SDL_GetError());
-                        }
-
-                        break;
                      }
                   }
-               }
-               else
-               {
-                  SDL_Log("This joystick is not supported by SDL's gamepad interface.");
-               }
-            } break;
+                  else
+                  {
+                     SDL_assert(Gamepad_Event.type == SDL_EVENT_GAMEPAD_REMOVED);
 
-            case SDL_EVENT_GAMEPAD_REMOVED: {
-               SDL_JoystickID ID = Event.gdevice.which;
-               if(SDL_IsGamepad(ID))
-               {
-                  int Gamepad_Index = Sdl_Get_Gamepad_Index(ID);
-                  SDL_assert(Gamepad_Index > 0);
-                  SDL_assert(Gamepad_Index < GAME_CONTROLLER_COUNT);
-                  SDL_assert(Sdl.Gamepads[Gamepad_Index]);
+                     int Gamepad_Index = Sdl_Get_Gamepad_Index(ID);
+                     SDL_assert(Gamepad_Index > 0);
+                     SDL_assert(Gamepad_Index < GAME_CONTROLLER_COUNT);
+                     SDL_assert(Sdl.Gamepads[Gamepad_Index]);
 
-                  SDL_CloseGamepad(Sdl.Gamepads[Gamepad_Index]);
+                     SDL_CloseGamepad(Sdl.Gamepads[Gamepad_Index]);
 
-                  Sdl.Gamepads[Gamepad_Index] = 0;
-                  Input->Controllers[Gamepad_Index].Connected = false;
+                     Sdl.Gamepads[Gamepad_Index] = 0;
+                     Input->Controllers[Gamepad_Index].Connected = false;
 
-                  SDL_Log("Gamepad removed from slot %d.", Gamepad_Index);
+                     SDL_Log("Gamepad removed from slot %d.", Gamepad_Index);
+                  }
                }
                else
                {
