@@ -144,7 +144,7 @@ static inline bool Was_Released(game_button Button)
 }
 
 // Game API:
-#define UPDATE(Name) void Name(game_memory Memory, game_texture Backbuffer, game_input *Input)
+#define UPDATE(Name) void Name(game_memory Memory, game_texture Backbuffer, game_input *Input, float Frame_Seconds)
 UPDATE(Update);
 
 // Platform API:

@@ -340,7 +340,7 @@ int main(void)
       }
 
       // Update game state.
-      Update(Memory, Backbuffer, Input);
+      Update(Memory, Backbuffer, Input, Sdl.Actual_Frame_Seconds);
 
       // Render frame.
       SDL_SetRenderDrawColor(Sdl.Renderer, 0, 0, 0, 255);

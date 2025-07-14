@@ -19,6 +19,10 @@ typedef struct {
    int X;
    int Y;
    int Z;
+
+   float Animation_Offset_X;
+   float Animation_Offset_Y;
+
    bool Active;
 } player;
 
@@ -179,6 +183,50 @@ static bool Position_Is_Occupied(int Tile)
    return(Result);
 }
 
+static bool Player_Can_Move(map *Map, player *Player, int Delta_X, int Delta_Y)
+{
+   bool Result = false;
+
+   int New_Player_X = Player->X + Delta_X;
+   int New_Player_Y = Player->Y + Delta_Y;
+   int New_Player_Z = Player->Z;
+
+   int Tile_00 = Get_Map_Tile(Map, New_Player_X, New_Player_Y, New_Player_Z);
+   int Tile_01 = Get_Map_Tile(Map, New_Player_X + 1, New_Player_Y, New_Player_Z);
+   int Tile_10 = Get_Map_Tile(Map, New_Player_X, New_Player_Y + 1, New_Player_Z);
+   int Tile_11 = Get_Map_Tile(Map, New_Player_X + 1, New_Player_Y + 1, New_Player_Z);
+
+   if(!Position_Is_Occupied(Tile_00) &&
+      !Position_Is_Occupied(Tile_01) &&
+      !Position_Is_Occupied(Tile_10) &&
+      !Position_Is_Occupied(Tile_11))
+   {
+      Result = true;
+   }
+
+   return(Result);
+}
+
+static bool Player_Can_Ascend(map *Map, player *Player)
+{
+   bool Result = false;
+
+   int Tile_00 = Get_Map_Tile(Map, Player->X, Player->Y, Player->Z);
+   int Tile_01 = Get_Map_Tile(Map, Player->X + 1, Player->Y, Player->Z);
+   int Tile_10 = Get_Map_Tile(Map, Player->X, Player->Y + 1, Player->Z);
+   int Tile_11 = Get_Map_Tile(Map, Player->X + 1, Player->Y + 1, Player->Z);
+
+   if(Tile_00 == 3 &&
+      Tile_01 == 3 &&
+      Tile_10 == 3 &&
+      Tile_11 == 3)
+   {
+      Result = true;
+   }
+
+   return(Result);
+}
+
 static map_chunk Debug_Map_Chunk = {{
       {2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2},
       {2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2},
@@ -255,6 +303,8 @@ UPDATE(Update)
          Player->Active = true;
 
          bool Moving_Camera = Is_Held(Controller->Shoulder_Right);
+         bool Player_Animating = (Player->Animation_Offset_X != 0.0f || Player->Animation_Offset_Y != 0.0f);
+
          if(Moving_Camera)
          {
             int Camera_Delta = 4;
@@ -266,40 +316,53 @@ UPDATE(Update)
                if(Was_Pressed(Controller->Move_Right)) Game_State->Camera_X += Camera_Delta;
             }
          }
-         else
+         else if(!Player_Animating)
          {
             bool Dash = Is_Held(Controller->Action_Down);
-            bool Up    = Was_Pressed(Controller->Move_Up)    || (Dash && Is_Held(Controller->Move_Up));
-            bool Down  = Was_Pressed(Controller->Move_Down)  || (Dash && Is_Held(Controller->Move_Down));
-            bool Left  = Was_Pressed(Controller->Move_Left)  || (Dash && Is_Held(Controller->Move_Left));
-            bool Right = Was_Pressed(Controller->Move_Right) || (Dash && Is_Held(Controller->Move_Right));
+            bool Up    = Is_Held(Controller->Move_Up)    || (Dash && Is_Held(Controller->Move_Up));
+            bool Down  = Is_Held(Controller->Move_Down)  || (Dash && Is_Held(Controller->Move_Down));
+            bool Left  = Is_Held(Controller->Move_Left)  || (Dash && Is_Held(Controller->Move_Left));
+            bool Right = Is_Held(Controller->Move_Right) || (Dash && Is_Held(Controller->Move_Right));
 
-            int New_Player_X = Player->X;
-            int New_Player_Y = Player->Y;
-            int New_Player_Z = Player->Z;
+            int Delta_X = 0;
+            int Delta_Y = 0;
 
-            if(Up)    New_Player_Y -= 1;
-            if(Down)  New_Player_Y += 1;
-            if(Left)  New_Player_X -= 1;
-            if(Right) New_Player_X += 1;
+            if(Up)    Delta_Y -= 1;
+            if(Down)  Delta_Y += 1;
+            if(Left)  Delta_X -= 1;
+            if(Right) Delta_X += 1;
 
-            if(New_Player_X != Player->X || New_Player_Y != Player->Y)
+            // TODO: This includes a number of redundant checks just to support
+            // sliding along walls when moving into them diagonally. It's not
+            // clear we even want to support diagonal movement, so this should
+            // all be cleaned up.
+            bool Can_Move = Player_Can_Move(Map, Player, Delta_X, Delta_Y);
+            if(!Can_Move && Delta_X && Delta_Y)
             {
-               int Tile_00 = Get_Map_Tile(Map, New_Player_X, New_Player_Y, New_Player_Z);
-               int Tile_01 = Get_Map_Tile(Map, New_Player_X + 1, New_Player_Y, New_Player_Z);
-               int Tile_10 = Get_Map_Tile(Map, New_Player_X, New_Player_Y + 1, New_Player_Z);
-               int Tile_11 = Get_Map_Tile(Map, New_Player_X + 1, New_Player_Y + 1, New_Player_Z);
-
-               if(!Position_Is_Occupied(Tile_00) &&
-                  !Position_Is_Occupied(Tile_01) &&
-                  !Position_Is_Occupied(Tile_10) &&
-                  !Position_Is_Occupied(Tile_11))
+               Can_Move = Player_Can_Move(Map, Player, Delta_X, 0);
+               if(Can_Move)
                {
-                  Player->X = New_Player_X;
-                  Player->Y = New_Player_Y;
+                  Delta_Y = 0;
                }
+               else
+               {
+                  Can_Move = Player_Can_Move(Map, Player, 0, Delta_Y);
+                  if(Can_Move)
+                  {
+                     Delta_X = 0;
+                  }
+               }
+            }
 
-               if(Tile_00 == 3 && Tile_01 == 3 && Tile_10 == 3 && Tile_11 == 3)
+            if(Can_Move && (Delta_X || Delta_Y))
+            {
+               Player->Animation_Offset_X = (float)Delta_X;
+               Player->Animation_Offset_Y = (float)Delta_Y;
+
+               Player->X += Delta_X;
+               Player->Y += Delta_Y;
+
+               if(Player_Can_Ascend(Map, Player))
                {
                   if(Player->Z == 0)
                   {
@@ -318,6 +381,29 @@ UPDATE(Update)
          int Camera_Stick_Delta = 4;
          Game_State->Camera_X += (Camera_Stick_Delta * Controller->Stick_Right_X);
          Game_State->Camera_Y += (Camera_Stick_Delta * Controller->Stick_Right_Y);
+
+         float Delta = 10.0f * Frame_Seconds;
+         if(Player->Animation_Offset_X > 0)
+         {
+            Player->Animation_Offset_X -= Delta;
+            if(Player->Animation_Offset_X < 0) Player->Animation_Offset_X = 0;
+         }
+         else if(Player->Animation_Offset_X < 0)
+         {
+            Player->Animation_Offset_X += Delta;
+            if(Player->Animation_Offset_X > 0) Player->Animation_Offset_X = 0;
+         }
+
+         if(Player->Animation_Offset_Y > 0)
+         {
+            Player->Animation_Offset_Y -= Delta;
+            if(Player->Animation_Offset_Y < 0) Player->Animation_Offset_Y = 0;
+         }
+         else if(Player->Animation_Offset_Y < 0)
+         {
+            Player->Animation_Offset_Y += Delta;
+            if(Player->Animation_Offset_Y > 0) Player->Animation_Offset_Y = 0;
+         }
       }
    }
 
@@ -361,8 +447,11 @@ UPDATE(Update)
       player *Player = Game_State->Players + Player_Index;
       if(Player->Active && Player->Z == Cam_Z)
       {
-         int Pixel_X = Tile_Dim_Pixels * (Player->X - Game_State->Camera_X) + Backbuffer.Width/2;
-         int Pixel_Y = Tile_Dim_Pixels * (Player->Y - Game_State->Camera_Y) + Backbuffer.Height/2;
+         int Offset_X = Tile_Dim_Pixels * Player->Animation_Offset_X;
+         int Offset_Y = Tile_Dim_Pixels * Player->Animation_Offset_Y;
+
+         int Pixel_X = Tile_Dim_Pixels * (Player->X - Game_State->Camera_X) + Backbuffer.Width/2  - Offset_X;
+         int Pixel_Y = Tile_Dim_Pixels * (Player->Y - Game_State->Camera_Y) + Backbuffer.Height/2 - Offset_Y;
 
          Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Player_Pixel_Dim, Player_Pixel_Dim, 0x000088FF);
          Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Player_Pixel_Dim, Player_Pixel_Dim, 4*Border_Dim_Pixels, 0xFFFFFFFF);
