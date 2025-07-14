@@ -3,15 +3,24 @@
 #include "game.h"
 #include "text.c"
 
+#define MAP_CHUNK_DIM 16
 typedef struct {
-   int Positions[16][16];
+   int Positions[MAP_CHUNK_DIM][MAP_CHUNK_DIM];
 } map_chunk;
 
 typedef struct {
    int Chunk_Count_X;
    int Chunk_Count_Y;
+   int Chunk_Count_Z;
    map_chunk *Chunks;
 } map;
+
+typedef struct {
+   int X;
+   int Y;
+   int Z;
+   bool Active;
+} player;
 
 typedef struct {
    arena Arena;
@@ -20,11 +29,11 @@ typedef struct {
    text_font Font;
 
    map Map;
-   int Player_X;
-   int Player_Y;
+   player Players[GAME_CONTROLLER_COUNT];
 
    int Camera_X;
    int Camera_Y;
+   int Camera_Z;
 } game_state;
 
 static void Clear(game_texture Destination, u32 Color)
@@ -54,6 +63,14 @@ static void Draw_Rectangle(game_texture Destination, int X, int Y, int Width, in
    }
 }
 
+static void Draw_Outline(game_texture Destination, int X, int Y, int Width, int Height, int Weight, u32 Color)
+{
+   Draw_Rectangle(Destination, X, Y, Width-Weight, Weight, Color); // Top
+   Draw_Rectangle(Destination, X+Weight, Y+Height-Weight, Width-Weight, Weight, Color); // Bottom
+   Draw_Rectangle(Destination, X, Y+Weight, Weight, Height-Weight, Color); // Left
+   Draw_Rectangle(Destination, X+Width-Weight, Y, Weight, Height-Weight, Color); // Right
+}
+
 static void Draw_Bitmap(game_texture Destination, game_texture Source, float X, float Y)
 {
    X += Source.Offset_X;
@@ -78,18 +95,18 @@ static void Draw_Bitmap(game_texture Destination, game_texture Source, float X, 
          u32 Source_Pixel = Source_Row[X_Offset++];
          u32 *Destination_Pixel = Destination_Row + Destination_X;
 
-         float SR = (float)((Source_Pixel >> 24) & 0xFF) / 255.0f;
-         float SG = (float)((Source_Pixel >> 16) & 0xFF) / 255.0f;
-         float SB = (float)((Source_Pixel >>  8) & 0xFF) / 255.0f;
+         float SR = (float)((Source_Pixel >> 24) & 0xFF);
+         float SG = (float)((Source_Pixel >> 16) & 0xFF);
+         float SB = (float)((Source_Pixel >>  8) & 0xFF);
          float SA = (float)((Source_Pixel >>  0) & 0xFF) / 255.0f;
 
-         float DR = (float)((*Destination_Pixel >> 24) & 0xFF) / 255.0f;
-         float DG = (float)((*Destination_Pixel >> 16) & 0xFF) / 255.0f;
-         float DB = (float)((*Destination_Pixel >>  8) & 0xFF) / 255.0f;
+         float DR = (float)((*Destination_Pixel >> 24) & 0xFF);
+         float DG = (float)((*Destination_Pixel >> 16) & 0xFF);
+         float DB = (float)((*Destination_Pixel >>  8) & 0xFF);
 
-         u32 R = (u8)((255.0f*DR * (1.0f-SA) + 255.0f*SR) + 0.5f);
-         u32 G = (u8)((255.0f*DG * (1.0f-SA) + 255.0f*SG) + 0.5f);
-         u32 B = (u8)((255.0f*DB * (1.0f-SA) + 255.0f*SB) + 0.5f);
+         u32 R = (u32)((DR * (1.0f-SA) + SR) + 0.5f);
+         u32 G = (u32)((DG * (1.0f-SA) + SG) + 0.5f);
+         u32 B = (u32)((DB * (1.0f-SA) + SB) + 0.5f);
 
          *Destination_Pixel = (R<<24) | (G<<16) | (B<<8) | 0xFF;
       }
@@ -98,48 +115,87 @@ static void Draw_Bitmap(game_texture Destination, game_texture Source, float X, 
    }
 }
 
-static bool Position_Is_Occupied(map *Map, int X, int Y)
+static void Draw_Text(game_texture Destination, text_font *Font, int X, int Y, string Text)
 {
-   bool Result = true;
+   // float Line_Advance = Font->Scale * (Font->Ascent - Font->Descent + Font->Line_Gap);
 
-   int Tile_Count_X = Array_Count(Map->Chunks[0].Positions[0]);
-   int Tile_Count_Y = Array_Count(Map->Chunks[0].Positions);
-
-   int Max_X = Map->Chunk_Count_X * Tile_Count_X;
-   int Max_Y = Map->Chunk_Count_Y * Tile_Count_Y;
-
-   if(X >= 0 && X < Max_X && Y >= 0 && Y < Max_Y)
+   for(size Index = 0; Index < Text.Length; ++Index)
    {
-      int Chunk_X = X / Tile_Count_X;
-      int Chunk_Y = Y / Tile_Count_Y;
+      int Codepoint = Text.Data[Index];
 
-      map_chunk *Chunk = Map->Chunks + Chunk_Y*Map->Chunk_Count_X + Chunk_X;
-      int Relative_X = X % Tile_Count_X;
-      int Relative_Y = Y % Tile_Count_Y;
+      game_texture Glyph = Font->Glyphs[Codepoint];
+      Draw_Bitmap(Destination, Glyph, X, Y);
 
-      Result = (Chunk->Positions[Relative_Y][Relative_X] == 1);
+      if(Index != Text.Length-1)
+      {
+         int Next_Codepoint = Text.Data[Index + 1];
+         int Pair_Index = (Codepoint * Array_Count(Font->Glyphs)) + Next_Codepoint;
+         X += Font->Distances[Pair_Index];
+      }
+   }
+}
+
+static map_chunk *Get_Map_Chunk(map *Map, int X, int Y, int Z)
+{
+   map_chunk *Result = 0;
+
+   int Max_X = Map->Chunk_Count_X * MAP_CHUNK_DIM;
+   int Max_Y = Map->Chunk_Count_Y * MAP_CHUNK_DIM;
+   int Max_Z = Map->Chunk_Count_Z;
+
+   if(X >= 0 && X < Max_X && Y >= 0 && Y < Max_Y && Z >= 0 && Z < Max_Z)
+   {
+      int Chunk_X = X / MAP_CHUNK_DIM;
+      int Chunk_Y = Y / MAP_CHUNK_DIM;
+      int Chunk_Z = Z;
+
+      Result = Map->Chunks +
+         Chunk_Z * Map->Chunk_Count_Y * Map->Chunk_Count_X +
+         Chunk_Y * Map->Chunk_Count_X +
+         Chunk_X;
    }
 
    return(Result);
 }
 
+static int Get_Map_Tile(map *Map, int X, int Y, int Z)
+{
+   int Result = 0;
+
+   map_chunk *Chunk = Get_Map_Chunk(Map, X, Y, Z);
+   if(Chunk)
+   {
+      int Relative_X = X % MAP_CHUNK_DIM;
+      int Relative_Y = Y % MAP_CHUNK_DIM;
+      Result = Chunk->Positions[Relative_Y][Relative_X];
+   }
+
+   return(Result);
+}
+
+static bool Position_Is_Occupied(int Tile)
+{
+   bool Result = (Tile == 0 || Tile == 2);
+   return(Result);
+}
+
 static map_chunk Debug_Map_Chunk = {{
+      {2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2},
+      {2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2},
+      {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 2, 2},
+      {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 2, 2},
+      {2, 2, 1, 1, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
+      {2, 2, 1, 1, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
+      {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
       {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
       {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
-      {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1},
-      {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1},
-      {1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1},
-      {1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1},
-      {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1},
-      {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-      {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-      {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1},
-      {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1},
-      {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1},
-      {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1},
-      {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1},
-      {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
-      {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
+      {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
+      {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 1, 1, 2, 2},
+      {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 1, 1, 2, 2},
+      {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
+      {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
+      {2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2},
+      {2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2},
    }};
 
 UPDATE(Update)
@@ -161,10 +217,11 @@ UPDATE(Update)
 
       Assert((Scratch->Base + Scratch->Size) >= (Memory.Base + Memory.Size));
 
-      Map->Chunk_Count_X = 2;
+      Map->Chunk_Count_X = 4;
       Map->Chunk_Count_Y = 2;
+      Map->Chunk_Count_Z = 2;
 
-      int Chunk_Count = Map->Chunk_Count_X * Map->Chunk_Count_Y;
+      int Chunk_Count = Map->Chunk_Count_X * Map->Chunk_Count_Y * Map->Chunk_Count_Z;
       Map->Chunks = Allocate(Arena, map_chunk, Chunk_Count);
 
       for(int Chunk_Index = 0; Chunk_Index < Chunk_Count; ++Chunk_Index)
@@ -172,104 +229,151 @@ UPDATE(Update)
          Map->Chunks[Chunk_Index] = Debug_Map_Chunk;
       }
 
-      Game_State->Player_X = 8;
-      Game_State->Player_Y = 8;
+      for(int Player_Index = 0; Player_Index < Array_Count(Game_State->Players); ++Player_Index)
+      {
+         player *Player = Game_State->Players + Player_Index;
+         Player->X = 24;
+         Player->Y = 24;
+      }
+      Game_State->Camera_X = 24;
+      Game_State->Camera_Y = 24;
 
       Load_Font(Font, Arena, *Scratch, "data/LiberationSans.ttf", 32);
    }
 
-   u32 Palette[] = {0x0000FFFF, 0x0000DDFF};
-   int Tile_Count_X = Array_Count(Debug_Map_Chunk.Positions[0]);
-   int Tile_Count_Y = Array_Count(Debug_Map_Chunk.Positions);
-
-   int Tile_Dim_Pixels = Backbuffer.Width / 40;
-   int Player_Radius = 1;
-
-   int Player_Chunk_X = Game_State->Player_X / Tile_Count_X;
-   int Player_Chunk_Y = Game_State->Player_Y / Tile_Count_Y;
+   // int Tile_Dim_Pixels = Backbuffer.Width / 40;
+   int Tile_Dim_Pixels = Backbuffer.Height / 32;
+   int Border_Dim_Pixels = Maximum(1, Tile_Dim_Pixels / 16);
 
    for(int Controller_Index = 0; Controller_Index < GAME_CONTROLLER_COUNT; ++Controller_Index)
    {
       game_controller *Controller = Input->Controllers + Controller_Index;
       if(Controller->Connected)
       {
-         bool Dash = Is_Held(Controller->Shoulder_Right);
+         Assert(GAME_CONTROLLER_COUNT == Array_Count(Game_State->Players));
+         player *Player = Game_State->Players + Controller_Index;
+         Player->Active = true;
 
-         bool Up    = Was_Pressed(Controller->Move_Up)    || (Dash && Is_Held(Controller->Move_Up));
-         bool Down  = Was_Pressed(Controller->Move_Down)  || (Dash && Is_Held(Controller->Move_Down));
-         bool Left  = Was_Pressed(Controller->Move_Left)  || (Dash && Is_Held(Controller->Move_Left));
-         bool Right = Was_Pressed(Controller->Move_Right) || (Dash && Is_Held(Controller->Move_Right));
-
-         int New_Player_X = Game_State->Player_X;
-         int New_Player_Y = Game_State->Player_Y;
-
-         if(Up)    New_Player_Y -= 1;
-         if(Down)  New_Player_Y += 1;
-         if(Left)  New_Player_X -= 1;
-         if(Right) New_Player_X += 1;
-
-         if(!Position_Is_Occupied(Map, New_Player_X, New_Player_Y) &&
-            !Position_Is_Occupied(Map, New_Player_X + 1, New_Player_Y) &&
-            !Position_Is_Occupied(Map, New_Player_X, New_Player_Y + 1) &&
-            !Position_Is_Occupied(Map, New_Player_X + 1, New_Player_Y + 1))
+         bool Moving_Camera = Is_Held(Controller->Shoulder_Right);
+         if(Moving_Camera)
          {
-            Game_State->Player_X = New_Player_X;
-            Game_State->Player_Y = New_Player_Y;
-         }
-
-         if(Is_Held(Controller->Action_Up))    Game_State->Camera_Y -= 10;
-         if(Is_Held(Controller->Action_Down))  Game_State->Camera_Y += 10;
-         if(Is_Held(Controller->Action_Left))  Game_State->Camera_X -= 10;
-         if(Is_Held(Controller->Action_Right)) Game_State->Camera_X += 10;
-      }
-   }
-
-   Clear(Backbuffer, 0x0000FFFF);
-
-   for(int Chunk_Y = 0; Chunk_Y < Map->Chunk_Count_Y; ++Chunk_Y)
-   {
-      for(int Chunk_X = 0; Chunk_X < Map->Chunk_Count_X; ++Chunk_X)
-      {
-         map_chunk *Chunk = Map->Chunks + Chunk_Y*Map->Chunk_Count_X + Chunk_X;
-
-         int Chunk_Y_Offset = Tile_Dim_Pixels * Chunk_Y * Tile_Count_Y;
-         for(int Tile_Y = 0; Tile_Y < Tile_Count_Y; ++Tile_Y)
-         {
-            int Y = Chunk_Y_Offset + Tile_Y*Tile_Dim_Pixels - Game_State->Camera_Y;
-            for(int Tile_X = 0; Tile_X < Tile_Count_X; ++Tile_X)
+            int Camera_Delta = 4;
+            if(Is_Held(Controller->Shoulder_Right))
             {
-               int Chunk_X_Offset = Tile_Dim_Pixels * Chunk_X * Tile_Count_X;
-               int X = Chunk_X_Offset + Tile_X*Tile_Dim_Pixels - Game_State->Camera_X;
-               int Palette_Index = Chunk->Positions[Tile_Y][Tile_X];
-               Draw_Rectangle(Backbuffer, X, Y, Tile_Dim_Pixels, Tile_Dim_Pixels, Palette[Palette_Index]);
+               if(Was_Pressed(Controller->Move_Up))    Game_State->Camera_Y -= Camera_Delta;
+               if(Was_Pressed(Controller->Move_Down))  Game_State->Camera_Y += Camera_Delta;
+               if(Was_Pressed(Controller->Move_Left))  Game_State->Camera_X -= Camera_Delta;
+               if(Was_Pressed(Controller->Move_Right)) Game_State->Camera_X += Camera_Delta;
             }
          }
+         else
+         {
+            bool Dash = Is_Held(Controller->Action_Down);
+            bool Up    = Was_Pressed(Controller->Move_Up)    || (Dash && Is_Held(Controller->Move_Up));
+            bool Down  = Was_Pressed(Controller->Move_Down)  || (Dash && Is_Held(Controller->Move_Down));
+            bool Left  = Was_Pressed(Controller->Move_Left)  || (Dash && Is_Held(Controller->Move_Left));
+            bool Right = Was_Pressed(Controller->Move_Right) || (Dash && Is_Held(Controller->Move_Right));
+
+            int New_Player_X = Player->X;
+            int New_Player_Y = Player->Y;
+            int New_Player_Z = Player->Z;
+
+            if(Up)    New_Player_Y -= 1;
+            if(Down)  New_Player_Y += 1;
+            if(Left)  New_Player_X -= 1;
+            if(Right) New_Player_X += 1;
+
+            if(New_Player_X != Player->X || New_Player_Y != Player->Y)
+            {
+               int Tile_00 = Get_Map_Tile(Map, New_Player_X, New_Player_Y, New_Player_Z);
+               int Tile_01 = Get_Map_Tile(Map, New_Player_X + 1, New_Player_Y, New_Player_Z);
+               int Tile_10 = Get_Map_Tile(Map, New_Player_X, New_Player_Y + 1, New_Player_Z);
+               int Tile_11 = Get_Map_Tile(Map, New_Player_X + 1, New_Player_Y + 1, New_Player_Z);
+
+               if(!Position_Is_Occupied(Tile_00) &&
+                  !Position_Is_Occupied(Tile_01) &&
+                  !Position_Is_Occupied(Tile_10) &&
+                  !Position_Is_Occupied(Tile_11))
+               {
+                  Player->X = New_Player_X;
+                  Player->Y = New_Player_Y;
+               }
+
+               if(Tile_00 == 3 && Tile_01 == 3 && Tile_10 == 3 && Tile_11 == 3)
+               {
+                  if(Player->Z == 0)
+                  {
+                     Player->Z = 1;
+                     Game_State->Camera_Z = 1;
+                  }
+                  else
+                  {
+                     Player->Z = 0;
+                     Game_State->Camera_Z = 0;
+                  }
+               }
+            }
+         }
+
+         int Camera_Stick_Delta = 4;
+         Game_State->Camera_X += (Camera_Stick_Delta * Controller->Stick_Right_X);
+         Game_State->Camera_Y += (Camera_Stick_Delta * Controller->Stick_Right_Y);
       }
    }
 
-   int Player_X = Tile_Dim_Pixels*Game_State->Player_X - Game_State->Camera_X;
-   int Player_Y = Tile_Dim_Pixels*Game_State->Player_Y - Game_State->Camera_Y;
-   Draw_Rectangle(Backbuffer, Player_X, Player_Y, 2*(Tile_Dim_Pixels), 2*(Tile_Dim_Pixels), 0xFFFFFFFF);
+   int Cam_X = Game_State->Camera_X;
+   int Cam_Y = Game_State->Camera_Y;
+   int Cam_Z = Game_State->Camera_Z;
 
-   float Text_X = 5.0f;
-   float Text_Y = (float)Backbuffer.Height - 10.0f;
-   float Line_Advance = Font->Scale * (Font->Ascent - Font->Descent + Font->Line_Gap);
+   u32 Palettes[2][4] = {
+      {0x000088FF, 0x0000CCFF, 0x0000FFFF, 0x008800FF},
+      {0x008800FF, 0x00CC00FF, 0x00FF00FF, 0x000088FF},
+   };
+   u32 *Palette = Palettes[Cam_Z];
 
-   string Message = S("Dungeon Simulator: Floor 1");
-   for(size Index = 0; Index < Message.Length; ++Index)
+   Clear(Backbuffer, Palette[0]);
+
+   int Min_X = Game_State->Camera_X - 24;
+   int Max_X = Game_State->Camera_X + 24;
+
+   int Min_Y = Game_State->Camera_Y - 20;
+   int Max_Y = Game_State->Camera_Y + 20;
+
+   for(int Y = Min_Y; Y < Max_Y; ++Y)
    {
-      int Codepoint = Message.Data[Index];
-
-      game_texture Glyph = Font->Glyphs[Codepoint];
-      Draw_Bitmap(Backbuffer, Glyph, Text_X, Text_Y);
-
-      if(Index != Message.Length-1)
+      for(int X = Min_X; X < Max_X; ++X)
       {
-         int Next_Codepoint = Message.Data[Index + 1];
-         int Pair_Index = (Codepoint * Array_Count(Font->Glyphs)) + Next_Codepoint;
-         Text_X += Font->Distances[Pair_Index];
+         int Tile = Get_Map_Tile(Map, X, Y, Cam_Z);
+         int Pixel_X = Tile_Dim_Pixels*(X - Cam_X) + Backbuffer.Width/2;
+         int Pixel_Y = Tile_Dim_Pixels*(Y - Cam_Y) + Backbuffer.Height/2;
+
+         Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Tile_Dim_Pixels, Tile_Dim_Pixels, Palette[Tile]);
+         if(Tile)
+         {
+            Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Tile_Dim_Pixels, Tile_Dim_Pixels, Border_Dim_Pixels, Palette[1]);
+         }
       }
    }
+
+   int Player_Pixel_Dim = 2 * Tile_Dim_Pixels;
+   for(int Player_Index = 0; Player_Index < Array_Count(Game_State->Players); ++Player_Index)
+   {
+      player *Player = Game_State->Players + Player_Index;
+      if(Player->Active && Player->Z == Cam_Z)
+      {
+         int Pixel_X = Tile_Dim_Pixels * (Player->X - Game_State->Camera_X) + Backbuffer.Width/2;
+         int Pixel_Y = Tile_Dim_Pixels * (Player->Y - Game_State->Camera_Y) + Backbuffer.Height/2;
+
+         Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Player_Pixel_Dim, Player_Pixel_Dim, 0x000088FF);
+         Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Player_Pixel_Dim, Player_Pixel_Dim, 4*Border_Dim_Pixels, 0xFFFFFFFF);
+      }
+   }
+
+   int Text_X = 5;
+   int Text_Y = Backbuffer.Height - 10;
+   Draw_Text(Backbuffer, Font, Text_X, Text_Y, (Cam_Z == 0)
+             ? S("Dungeon Simulator: Floor 1")
+             : S("Dungeon Simulator: Floor 2"));
 
    int Gui_Dim = 16;
    int Gui_X = Backbuffer.Width - 2*Gui_Dim*GAME_CONTROLLER_COUNT;
@@ -279,8 +383,15 @@ UPDATE(Update)
    {
       game_controller *Controller = Input->Controllers + Controller_Index;
 
-      u32 Color = (Controller->Connected) ? 0xFFFFFFFF : 0x0000CCFF;
-      Draw_Rectangle(Backbuffer, Gui_X, Gui_Y, Gui_Dim, Gui_Dim, Color);
+      if(Controller->Connected)
+      {
+         Draw_Rectangle(Backbuffer, Gui_X, Gui_Y, Gui_Dim, Gui_Dim, 0x00FF00FF);
+      }
+      else
+      {
+         Draw_Rectangle(Backbuffer, Gui_X, Gui_Y, Gui_Dim, Gui_Dim, 0x004400FF);
+         Draw_Outline(Backbuffer, Gui_X, Gui_Y, Gui_Dim, Gui_Dim, 2*Border_Dim_Pixels, 0x00FF00FF);
+      }
       Gui_X += (2 * Gui_Dim);
    }
 }
