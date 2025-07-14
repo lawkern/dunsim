@@ -1,19 +1,10 @@
 /* (c) copyright 2025 Lawrence D. Kern /////////////////////////////////////// */
 
 #include "game.h"
+
+#include "math.c"
 #include "text.c"
-
-#define MAP_CHUNK_DIM 16
-typedef struct {
-   int Positions[MAP_CHUNK_DIM][MAP_CHUNK_DIM];
-} map_chunk;
-
-typedef struct {
-   int Chunk_Count_X;
-   int Chunk_Count_Y;
-   int Chunk_Count_Z;
-   map_chunk *Chunks;
-} map;
+#include "map.c"
 
 typedef struct {
    int X;
@@ -139,50 +130,6 @@ static void Draw_Text(game_texture Destination, text_font *Font, int X, int Y, s
    }
 }
 
-static map_chunk *Get_Map_Chunk(map *Map, int X, int Y, int Z)
-{
-   map_chunk *Result = 0;
-
-   int Max_X = Map->Chunk_Count_X * MAP_CHUNK_DIM;
-   int Max_Y = Map->Chunk_Count_Y * MAP_CHUNK_DIM;
-   int Max_Z = Map->Chunk_Count_Z;
-
-   if(X >= 0 && X < Max_X && Y >= 0 && Y < Max_Y && Z >= 0 && Z < Max_Z)
-   {
-      int Chunk_X = X / MAP_CHUNK_DIM;
-      int Chunk_Y = Y / MAP_CHUNK_DIM;
-      int Chunk_Z = Z;
-
-      Result = Map->Chunks +
-         Chunk_Z * Map->Chunk_Count_Y * Map->Chunk_Count_X +
-         Chunk_Y * Map->Chunk_Count_X +
-         Chunk_X;
-   }
-
-   return(Result);
-}
-
-static int Get_Map_Tile(map *Map, int X, int Y, int Z)
-{
-   int Result = 0;
-
-   map_chunk *Chunk = Get_Map_Chunk(Map, X, Y, Z);
-   if(Chunk)
-   {
-      int Relative_X = X % MAP_CHUNK_DIM;
-      int Relative_Y = Y % MAP_CHUNK_DIM;
-      Result = Chunk->Positions[Relative_Y][Relative_X];
-   }
-
-   return(Result);
-}
-
-static bool Position_Is_Occupied(int Tile)
-{
-   bool Result = (Tile == 0 || Tile == 2);
-   return(Result);
-}
-
 static bool Player_Can_Move(map *Map, player *Player, int Delta_X, int Delta_Y)
 {
    bool Result = false;
@@ -191,10 +138,10 @@ static bool Player_Can_Move(map *Map, player *Player, int Delta_X, int Delta_Y)
    int New_Player_Y = Player->Y + Delta_Y;
    int New_Player_Z = Player->Z;
 
-   int Tile_00 = Get_Map_Tile(Map, New_Player_X, New_Player_Y, New_Player_Z);
-   int Tile_01 = Get_Map_Tile(Map, New_Player_X + 1, New_Player_Y, New_Player_Z);
-   int Tile_10 = Get_Map_Tile(Map, New_Player_X, New_Player_Y + 1, New_Player_Z);
-   int Tile_11 = Get_Map_Tile(Map, New_Player_X + 1, New_Player_Y + 1, New_Player_Z);
+   int Tile_00 = Get_Map_Position_Value(Map, New_Player_X, New_Player_Y, New_Player_Z);
+   int Tile_01 = Get_Map_Position_Value(Map, New_Player_X + 1, New_Player_Y, New_Player_Z);
+   int Tile_10 = Get_Map_Position_Value(Map, New_Player_X, New_Player_Y + 1, New_Player_Z);
+   int Tile_11 = Get_Map_Position_Value(Map, New_Player_X + 1, New_Player_Y + 1, New_Player_Z);
 
    if(!Position_Is_Occupied(Tile_00) &&
       !Position_Is_Occupied(Tile_01) &&
@@ -211,10 +158,10 @@ static bool Player_Can_Ascend(map *Map, player *Player)
 {
    bool Result = false;
 
-   int Tile_00 = Get_Map_Tile(Map, Player->X, Player->Y, Player->Z);
-   int Tile_01 = Get_Map_Tile(Map, Player->X + 1, Player->Y, Player->Z);
-   int Tile_10 = Get_Map_Tile(Map, Player->X, Player->Y + 1, Player->Z);
-   int Tile_11 = Get_Map_Tile(Map, Player->X + 1, Player->Y + 1, Player->Z);
+   int Tile_00 = Get_Map_Position_Value(Map, Player->X, Player->Y, Player->Z);
+   int Tile_01 = Get_Map_Position_Value(Map, Player->X + 1, Player->Y, Player->Z);
+   int Tile_10 = Get_Map_Position_Value(Map, Player->X, Player->Y + 1, Player->Z);
+   int Tile_11 = Get_Map_Position_Value(Map, Player->X + 1, Player->Y + 1, Player->Z);
 
    if(Tile_00 == 3 &&
       Tile_01 == 3 &&
@@ -226,25 +173,6 @@ static bool Player_Can_Ascend(map *Map, player *Player)
 
    return(Result);
 }
-
-static map_chunk Debug_Map_Chunk = {{
-      {2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2},
-      {2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2},
-      {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 2, 2},
-      {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 2, 2},
-      {2, 2, 1, 1, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
-      {2, 2, 1, 1, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
-      {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
-      {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
-      {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
-      {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
-      {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 1, 1, 2, 2},
-      {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 1, 1, 2, 2},
-      {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
-      {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
-      {2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2},
-      {2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2},
-   }};
 
 UPDATE(Update)
 {
@@ -265,26 +193,29 @@ UPDATE(Update)
 
       Assert((Scratch->Base + Scratch->Size) >= (Memory.Base + Memory.Size));
 
-      Map->Chunk_Count_X = 4;
-      Map->Chunk_Count_Y = 2;
-      Map->Chunk_Count_Z = 2;
-
-      int Chunk_Count = Map->Chunk_Count_X * Map->Chunk_Count_Y * Map->Chunk_Count_Z;
-      Map->Chunks = Allocate(Arena, map_chunk, Chunk_Count);
-
-      for(int Chunk_Index = 0; Chunk_Index < Chunk_Count; ++Chunk_Index)
+      for(int Chunk_Z = 0; Chunk_Z <= 1; ++Chunk_Z)
       {
-         Map->Chunks[Chunk_Index] = Debug_Map_Chunk;
+         int Z = Chunk_Z;
+         for(int Chunk_Y = -8; Chunk_Y <= 8; ++Chunk_Y)
+         {
+            int Y = Chunk_Y * MAP_CHUNK_DIM;
+            for(int Chunk_X = -10; Chunk_X <= 10; ++Chunk_X)
+            {
+               int X = Chunk_X * MAP_CHUNK_DIM;
+               *Insert_Map_Chunk(Map, X, Y, Z) = Debug_Map_Chunk;
+            }
+         }
       }
+
+      Game_State->Camera_X = 2;
+      Game_State->Camera_Y = 2;
 
       for(int Player_Index = 0; Player_Index < Array_Count(Game_State->Players); ++Player_Index)
       {
          player *Player = Game_State->Players + Player_Index;
-         Player->X = 24;
-         Player->Y = 24;
+         Player->X = Game_State->Camera_X;
+         Player->Y = Game_State->Camera_Y;
       }
-      Game_State->Camera_X = 24;
-      Game_State->Camera_Y = 24;
 
       Load_Font(Font, Arena, *Scratch, "data/LiberationSans.ttf", 32);
    }
@@ -404,6 +335,12 @@ UPDATE(Update)
             Player->Animation_Offset_Y += Delta;
             if(Player->Animation_Offset_Y > 0) Player->Animation_Offset_Y = 0;
          }
+
+         if(Was_Pressed(Controller->Start))
+         {
+            Game_State->Camera_X = Player->X;
+            Game_State->Camera_Y = Player->Y;
+         }
       }
    }
 
@@ -419,17 +356,19 @@ UPDATE(Update)
 
    Clear(Backbuffer, Palette[0]);
 
-   int Min_X = Game_State->Camera_X - 24;
-   int Max_X = Game_State->Camera_X + 24;
+   // TODO: Loop over the surrounding chunks instead of tiles so that we don't
+   // have to query for the chunk on each iteration.
+   int Min_X = Game_State->Camera_X - MAP_CHUNK_DIM*2;
+   int Max_X = Game_State->Camera_X + MAP_CHUNK_DIM*2;
 
-   int Min_Y = Game_State->Camera_Y - 20;
-   int Max_Y = Game_State->Camera_Y + 20;
+   int Min_Y = Game_State->Camera_Y - MAP_CHUNK_DIM*2;
+   int Max_Y = Game_State->Camera_Y + MAP_CHUNK_DIM*2;
 
    for(int Y = Min_Y; Y < Max_Y; ++Y)
    {
       for(int X = Min_X; X < Max_X; ++X)
       {
-         int Tile = Get_Map_Tile(Map, X, Y, Cam_Z);
+         int Tile = Get_Map_Position_Value(Map, X, Y, Cam_Z);
          int Pixel_X = Tile_Dim_Pixels*(X - Cam_X) + Backbuffer.Width/2;
          int Pixel_Y = Tile_Dim_Pixels*(Y - Cam_Y) + Backbuffer.Height/2;
 
@@ -447,9 +386,13 @@ UPDATE(Update)
       player *Player = Game_State->Players + Player_Index;
       if(Player->Active && Player->Z == Cam_Z)
       {
+#if 0
          int Offset_X = Tile_Dim_Pixels * Player->Animation_Offset_X;
          int Offset_Y = Tile_Dim_Pixels * Player->Animation_Offset_Y;
-
+#else
+         int Offset_X = 0;
+         int Offset_Y = 0;
+#endif
          int Pixel_X = Tile_Dim_Pixels * (Player->X - Game_State->Camera_X) + Backbuffer.Width/2  - Offset_X;
          int Pixel_Y = Tile_Dim_Pixels * (Player->Y - Game_State->Camera_Y) + Backbuffer.Height/2 - Offset_Y;
 

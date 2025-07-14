@@ -1,4 +1,4 @@
-CFLAGS = -g3 -Wall -Wextra -Wno-unused-function -Wno-unused-variable
+CFLAGS = -g3 -Wall -Wextra -Wno-unused-function -Wno-unused-variable -Wno-unused-parameter
 LDLIBS = -lm
 
 compile:
