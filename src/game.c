@@ -6,11 +6,20 @@
 #include "text.c"
 #include "map.c"
 
+typedef enum {
+   Direction_None,
+   Direction_Up,
+   Direction_Down,
+   Direction_Left,
+   Direction_Right,
+} movement_direction;
+
 typedef struct {
    int X;
    int Y;
    int Z;
 
+   movement_direction Direction;
    float Animation_Offset_X;
    float Animation_Offset_Y;
 
@@ -250,40 +259,65 @@ UPDATE(Update)
          else if(!Player_Animating)
          {
             bool Dash = Is_Held(Controller->Action_Down);
-            bool Up    = Is_Held(Controller->Move_Up)    || (Dash && Is_Held(Controller->Move_Up));
-            bool Down  = Is_Held(Controller->Move_Down)  || (Dash && Is_Held(Controller->Move_Down));
-            bool Left  = Is_Held(Controller->Move_Left)  || (Dash && Is_Held(Controller->Move_Left));
-            bool Right = Is_Held(Controller->Move_Right) || (Dash && Is_Held(Controller->Move_Right));
+            int Delta = (Dash) ? 2 : 1;
+
+            bool Up    = Is_Held(Controller->Move_Up);
+            bool Down  = Is_Held(Controller->Move_Down);
+            bool Left  = Is_Held(Controller->Move_Left);
+            bool Right = Is_Held(Controller->Move_Right);
 
             int Delta_X = 0;
             int Delta_Y = 0;
 
-            if(Up)    Delta_Y -= 1;
-            if(Down)  Delta_Y += 1;
-            if(Left)  Delta_X -= 1;
-            if(Right) Delta_X += 1;
+            if(Up)    Delta_Y -= Delta;
+            if(Down)  Delta_Y += Delta;
+            if(Left)  Delta_X -= Delta;
+            if(Right) Delta_X += Delta;
 
             // TODO: This includes a number of redundant checks just to support
             // sliding along walls when moving into them diagonally. It's not
             // clear we even want to support diagonal movement, so this should
             // all be cleaned up.
-            bool Can_Move = Player_Can_Move(Map, Player, Delta_X, Delta_Y);
-            if(!Can_Move && Delta_X && Delta_Y)
+            bool Can_Move = false;
+            if(Delta_X && Delta_Y)
             {
-               Can_Move = Player_Can_Move(Map, Player, Delta_X, 0);
-               if(Can_Move)
-               {
-                  Delta_Y = 0;
-               }
-               else
+               if(Player->Direction == Direction_Right || Player->Direction == Direction_Left)
                {
                   Can_Move = Player_Can_Move(Map, Player, 0, Delta_Y);
                   if(Can_Move)
                   {
                      Delta_X = 0;
                   }
+                  else
+                  {
+                     Can_Move = Player_Can_Move(Map, Player, Delta_X, 0);
+                     Delta_Y = 0;
+                  }
+               }
+               else
+               {
+                  Can_Move = Player_Can_Move(Map, Player, Delta_X, 0);
+                  if(Can_Move)
+                  {
+                     Delta_Y = 0;
+                  }
+                  else
+                  {
+                     Can_Move = Player_Can_Move(Map, Player, 0, Delta_Y);
+                     Delta_X = 0;
+                  }
                }
             }
+            else
+            {
+               Can_Move = Player_Can_Move(Map, Player, Delta_X, Delta_Y);
+            }
+
+            if     (Delta_X > 0) Player->Direction = Direction_Right;
+            else if(Delta_X < 0) Player->Direction = Direction_Left;
+            else if(Delta_Y > 0) Player->Direction = Direction_Down;
+            else if(Delta_Y < 0) Player->Direction = Direction_Up;
+            else                 Player->Direction = Direction_None;
 
             if(Can_Move && (Delta_X || Delta_Y))
             {
@@ -309,7 +343,7 @@ UPDATE(Update)
             }
          }
 
-         int Camera_Stick_Delta = 4;
+         int Camera_Stick_Delta = 2;
          Game_State->Camera_X += (Camera_Stick_Delta * Controller->Stick_Right_X);
          Game_State->Camera_Y += (Camera_Stick_Delta * Controller->Stick_Right_Y);
 
@@ -386,7 +420,7 @@ UPDATE(Update)
       player *Player = Game_State->Players + Player_Index;
       if(Player->Active && Player->Z == Cam_Z)
       {
-#if 0
+#if 1
          int Offset_X = Tile_Dim_Pixels * Player->Animation_Offset_X;
          int Offset_Y = Tile_Dim_Pixels * Player->Animation_Offset_Y;
 #else
@@ -398,6 +432,21 @@ UPDATE(Update)
 
          Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Player_Pixel_Dim, Player_Pixel_Dim, 0x000088FF);
          Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Player_Pixel_Dim, Player_Pixel_Dim, 4*Border_Dim_Pixels, 0xFFFFFFFF);
+
+         int Half_Dim = Player_Pixel_Dim/2;
+         int Nose_Dim = 4 * Border_Dim_Pixels;
+         int Nose_X = Pixel_X + Half_Dim - Nose_Dim/2;
+         int Nose_Y = Pixel_Y + Half_Dim - Nose_Dim/2;
+
+         switch(Player->Direction)
+         {
+            case Direction_Up:    { Nose_Y -= (Half_Dim - Nose_Dim/2); } break;
+            case Direction_Down:  { Nose_Y += (Half_Dim - Nose_Dim/2); } break;
+            case Direction_Left:  { Nose_X -= (Half_Dim - Nose_Dim/2); } break;
+            case Direction_Right: { Nose_X += (Half_Dim - Nose_Dim/2); } break;
+            default: {} break;
+         }
+         Draw_Rectangle(Backbuffer, Nose_X, Nose_Y, Nose_Dim, Nose_Dim, 0x0000FFFF);
       }
    }
 
