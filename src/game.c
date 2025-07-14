@@ -122,19 +122,21 @@ static void Draw_Bitmap(game_texture Destination, game_texture Source, float X, 
 static void Draw_Text(game_texture Destination, text_font *Font, int X, int Y, string Text)
 {
    // float Line_Advance = Font->Scale * (Font->Ascent - Font->Descent + Font->Line_Gap);
-
-   for(size Index = 0; Index < Text.Length; ++Index)
+   if(Font->Loaded)
    {
-      int Codepoint = Text.Data[Index];
-
-      game_texture Glyph = Font->Glyphs[Codepoint];
-      Draw_Bitmap(Destination, Glyph, X, Y);
-
-      if(Index != Text.Length-1)
+      for(size Index = 0; Index < Text.Length; ++Index)
       {
-         int Next_Codepoint = Text.Data[Index + 1];
-         int Pair_Index = (Codepoint * Array_Count(Font->Glyphs)) + Next_Codepoint;
-         X += Font->Distances[Pair_Index];
+         int Codepoint = Text.Data[Index];
+
+         game_texture Glyph = Font->Glyphs[Codepoint];
+         Draw_Bitmap(Destination, Glyph, X, Y);
+
+         if(Index != Text.Length-1)
+         {
+            int Next_Codepoint = Text.Data[Index + 1];
+            int Pair_Index = (Codepoint * Array_Count(Font->Glyphs)) + Next_Codepoint;
+            X += Font->Distances[Pair_Index];
+         }
       }
    }
 }
@@ -227,6 +229,10 @@ UPDATE(Update)
       }
 
       Load_Font(Font, Arena, *Scratch, "data/LiberationSans.ttf", 32);
+      if(!Font->Loaded)
+      {
+         Log("During development, make sure to run the program from the project root folder.");
+      }
    }
 
    // int Tile_Dim_Pixels = Backbuffer.Width / 40;

@@ -148,5 +148,8 @@ static inline bool Was_Released(game_button Button)
 UPDATE(Update);
 
 // Platform API:
+#define LOG(Name) void Name(char *Format, ...)
+LOG(Log);
+
 #define READ_ENTIRE_FILE(Name) string Name(arena *Arena, char *Path)
 READ_ENTIRE_FILE(Read_Entire_File);

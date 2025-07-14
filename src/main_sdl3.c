@@ -3,6 +3,14 @@
 #include "SDL3/SDL.h"
 #include "game.c"
 
+LOG(Log)
+{
+   va_list Arguments;
+   va_start(Arguments, Format);
+   SDL_LogMessageV(SDL_LOG_CATEGORY_APPLICATION, SDL_LOG_PRIORITY_INFO, Format, Arguments);
+   va_end(Arguments);
+}
+
 READ_ENTIRE_FILE(Read_Entire_File)
 {
    string Result = {0};
@@ -217,18 +225,18 @@ int main(void)
                         }
                      } break;
 
-                     case SDLK_I:         {Sdl_Process_Button(&Keyboard->Action_Up, Key_Event.down);} break;
-                     case SDLK_K:         {Sdl_Process_Button(&Keyboard->Action_Down, Key_Event.down);} break;
-                     case SDLK_J:         {Sdl_Process_Button(&Keyboard->Action_Left, Key_Event.down);} break;
-                     case SDLK_L:         {Sdl_Process_Button(&Keyboard->Action_Right, Key_Event.down);} break;
-                     case SDLK_W:         {Sdl_Process_Button(&Keyboard->Move_Up, Key_Event.down);} break;
-                     case SDLK_S:         {Sdl_Process_Button(&Keyboard->Move_Down, Key_Event.down);} break;
-                     case SDLK_A:         {Sdl_Process_Button(&Keyboard->Move_Left, Key_Event.down);} break;
-                     case SDLK_D:         {Sdl_Process_Button(&Keyboard->Move_Right, Key_Event.down);} break;
-                     case SDLK_Q:         {Sdl_Process_Button(&Keyboard->Shoulder_Left, Key_Event.down);} break;
-                     case SDLK_E:         {Sdl_Process_Button(&Keyboard->Shoulder_Right, Key_Event.down);} break;
-                     case SDLK_SPACE:     {Sdl_Process_Button(&Keyboard->Start, Key_Event.down);} break;
-                     case SDLK_BACKSPACE: {Sdl_Process_Button(&Keyboard->Back, Key_Event.down);} break;
+                     case SDLK_I:                  { Sdl_Process_Button(&Keyboard->Action_Up, Key_Event.down); } break;
+                     case SDLK_K:                  { Sdl_Process_Button(&Keyboard->Action_Down, Key_Event.down); } break;
+                     case SDLK_J:                  { Sdl_Process_Button(&Keyboard->Action_Left, Key_Event.down); } break;
+                     case SDLK_L:                  { Sdl_Process_Button(&Keyboard->Action_Right, Key_Event.down); } break;
+                     case SDLK_W: case SDLK_UP:    { Sdl_Process_Button(&Keyboard->Move_Up, Key_Event.down); } break;
+                     case SDLK_S: case SDLK_DOWN:  { Sdl_Process_Button(&Keyboard->Move_Down, Key_Event.down); } break;
+                     case SDLK_A: case SDLK_LEFT:  { Sdl_Process_Button(&Keyboard->Move_Left, Key_Event.down); } break;
+                     case SDLK_D: case SDLK_RIGHT: { Sdl_Process_Button(&Keyboard->Move_Right, Key_Event.down); } break;
+                     case SDLK_Q:                  { Sdl_Process_Button(&Keyboard->Shoulder_Left, Key_Event.down); } break;
+                     case SDLK_E:                  { Sdl_Process_Button(&Keyboard->Shoulder_Right, Key_Event.down); } break;
+                     case SDLK_SPACE:              { Sdl_Process_Button(&Keyboard->Start, Key_Event.down); } break;
+                     case SDLK_BACKSPACE:          { Sdl_Process_Button(&Keyboard->Back, Key_Event.down); } break;
                   }
                }
             } break;

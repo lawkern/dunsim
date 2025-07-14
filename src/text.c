@@ -11,6 +11,8 @@ typedef struct {
 
    game_texture Glyphs[128];
    float *Distances;
+
+   bool Loaded;
 } text_font;
 
 static void Load_Font(text_font *Result, arena *Arena, arena Scratch, char *Path, int Pixel_Height)
@@ -61,5 +63,7 @@ static void Load_Font(text_font *Result, arena *Arena, arena Scratch, char *Path
             Result->Distances[C0 * Codepoint_Count + C1] = Scale * (float)(Advance_Width + Kerning_Distance);
          }
       }
+
+      Result->Loaded = true;
    }
 }
