@@ -3,7 +3,7 @@
 #include "game.h"
 
 #include "math.c"
-#include "text.c"
+#include "assets.c"
 #include "map.c"
 
 typedef enum {
@@ -31,6 +31,8 @@ typedef struct {
    arena Scratch;
 
    text_font Font;
+   game_texture Upstairs;
+   game_texture Downstairs;
 
    map Map;
    player Players[GAME_CONTROLLER_COUNT];
@@ -233,6 +235,9 @@ UPDATE(Update)
       {
          Log("During development, make sure to run the program from the project root folder.");
       }
+
+      Game_State->Upstairs = Load_Image(Arena, "data/upstairs.png");
+      Game_State->Downstairs = Load_Image(Arena, "data/downstairs.png");
    }
 
    // int Tile_Dim_Pixels = Backbuffer.Width / 40;
@@ -412,10 +417,17 @@ UPDATE(Update)
          int Pixel_X = Tile_Dim_Pixels*(X - Cam_X) + Backbuffer.Width/2;
          int Pixel_Y = Tile_Dim_Pixels*(Y - Cam_Y) + Backbuffer.Height/2;
 
-         Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Tile_Dim_Pixels, Tile_Dim_Pixels, Palette[Tile]);
-         if(Tile)
+         if(Tile == 3)
          {
-            Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Tile_Dim_Pixels, Tile_Dim_Pixels, Border_Dim_Pixels, Palette[1]);
+            Draw_Bitmap(Backbuffer, (Cam_Z == 0) ? Game_State->Upstairs : Game_State->Downstairs, Pixel_X, Pixel_Y);
+         }
+         else
+         {
+            Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Tile_Dim_Pixels, Tile_Dim_Pixels, Palette[Tile]);
+            if(Tile)
+            {
+               Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Tile_Dim_Pixels, Tile_Dim_Pixels, Border_Dim_Pixels, Palette[1]);
+            }
          }
       }
    }

@@ -3,6 +3,9 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 typedef struct {
    float Scale;
    float Ascent;
@@ -66,4 +69,40 @@ static void Load_Font(text_font *Result, arena *Arena, arena Scratch, char *Path
 
       Result->Loaded = true;
    }
+}
+
+static game_texture Load_Image(arena *Arena, char *Path)
+{
+   game_texture Result = {0};
+   int Width, Height, Bytes_Per_Pixel;
+
+   u8 *Data = stbi_load(Path, &Width, &Height, &Bytes_Per_Pixel, 0);
+   if(Data)
+   {
+      Assert(Bytes_Per_Pixel == 4);
+
+      Result.Memory = Allocate(Arena, u32, Width*Height);
+      if(Result.Memory)
+      {
+         Result.Width = Width;
+         Result.Height = Height;
+
+         u32 *Source_Pixels = (u32 *)Data;
+         for(int Index = 0; Index < Width*Height; ++Index)
+         {
+            u32 Source_Pixel = *Source_Pixels++;
+
+            u32 A = (Source_Pixel >> 24) & 0xFF;
+            u32 B = (Source_Pixel >> 16) & 0xFF;
+            u32 G = (Source_Pixel >>  8) & 0xFF;
+            u32 R = (Source_Pixel >>  0) & 0xFF;
+
+            Result.Memory[Index] = (R << 24) | (G << 16) | (B << 8) | A;
+         }
+      }
+
+      stbi_image_free(Data);
+   }
+
+   return(Result);
 }
