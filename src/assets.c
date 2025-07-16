@@ -6,19 +6,32 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+typedef enum {
+   Text_Size_Small,
+   Text_Size_Medium,
+   Text_Size_Large,
+
+   Text_Size_Count,
+} text_size;
+
+#define Glyph_Count 128
 typedef struct {
    float Scale;
+   game_texture Bitmaps[Glyph_Count];
+} text_glyphs;
+
+typedef struct {
    float Ascent;
    float Descent;
    float Line_Gap;
 
-   game_texture Glyphs[128];
+   text_glyphs Glyphs[Text_Size_Count];
    float *Distances;
 
    bool Loaded;
 } text_font;
 
-static void Load_Font(text_font *Result, arena *Arena, arena Scratch, char *Path, int Pixel_Height)
+static void Load_Font(text_font *Result, arena *Arena, arena Scratch, char *Path)
 {
    string Font = Read_Entire_File(&Scratch, Path);
    if(Font.Length)
@@ -29,41 +42,51 @@ static void Load_Font(text_font *Result, arena *Arena, arena Scratch, char *Path
       int Ascent, Descent, Line_Gap;
       stbtt_GetFontVMetrics(&Info, &Ascent, &Descent, &Line_Gap);
 
-      float Scale = stbtt_ScaleForPixelHeight(&Info, Pixel_Height);
-
-      Result->Scale = Scale;
       Result->Ascent = Ascent;
       Result->Descent = Descent;
       Result->Line_Gap = Line_Gap;
 
-      for(int Codepoint = '!'; Codepoint <= '~'; ++Codepoint)
+      int Pixel_Height = 16;
+      for(int Size_Index = 0; Size_Index < Text_Size_Count; ++Size_Index)
       {
-         game_texture *Glyph = Result->Glyphs + Codepoint;
-         u8 *Bitmap = stbtt_GetCodepointBitmap(&Info, 0, Scale, Codepoint, &Glyph->Width, &Glyph->Height, &Glyph->Offset_X, &Glyph->Offset_Y);
+         text_glyphs *Glyphs = Result->Glyphs + Size_Index;
+         Glyphs->Scale = stbtt_ScaleForPixelHeight(&Info, Pixel_Height);
+         Pixel_Height += 8;
 
-         size Pixel_Count = Glyph->Width * Glyph->Height;
-         Glyph->Memory = Allocate(Arena, u32, Pixel_Count);
-         for(int Index = 0; Index < Pixel_Count; ++Index)
+         for(int Codepoint = ' '; Codepoint <= '~'; ++Codepoint)
          {
-            u8 Value = Bitmap[Index];
-            Glyph->Memory[Index] = (Value << 0) | (Value << 8) | (Value << 16) | (Value << 24);
+            int Width, Height, Offset_X, Offset_Y;
+            u8 *Bitmap = stbtt_GetCodepointBitmap(&Info, 0, Glyphs->Scale, Codepoint, &Width, &Height, &Offset_X, &Offset_Y);
+
+            game_texture *Glyph = Glyphs->Bitmaps + Codepoint;
+            Glyph->Width    = Width;
+            Glyph->Height   = Height;
+            Glyph->Offset_X = Offset_X;
+            Glyph->Offset_Y = Offset_Y;
+
+            size Pixel_Count = Width * Height;
+            Glyph->Memory = Allocate(Arena, u32, Pixel_Count);
+            for(int Index = 0; Index < Pixel_Count; ++Index)
+            {
+               u8 Value = Bitmap[Index];
+               Glyph->Memory[Index] = (Value << 0) | (Value << 8) | (Value << 16) | (Value << 24);
+            }
+            stbtt_FreeBitmap(Bitmap, 0);
          }
-         stbtt_FreeBitmap(Bitmap, 0);
       }
 
-      int Codepoint_Count = Array_Count(Result->Glyphs);
-      int Distance_Count = Codepoint_Count * Codepoint_Count;
+      int Distance_Count = Glyph_Count * Glyph_Count;
       Result->Distances = Allocate(Arena, float, Distance_Count);
 
-      for(int C0 = 0; C0 < Codepoint_Count; ++C0)
+      for(int C0 = ' '; C0 <= '~'; ++C0)
       {
          int Advance_Width, Left_Side_Bearing;
          stbtt_GetCodepointHMetrics(&Info, C0, &Advance_Width, &Left_Side_Bearing);
 
-         for(int C1 = 0; C1 < Codepoint_Count; ++C1)
+         for(int C1 = ' '; C1 <= '~'; ++C1)
          {
             int Kerning_Distance = stbtt_GetCodepointKernAdvance(&Info, C0, C1);
-            Result->Distances[C0 * Codepoint_Count + C1] = Scale * (float)(Advance_Width + Kerning_Distance);
+            Result->Distances[C0 * Glyph_Count + C1] = (float)(Advance_Width + Kerning_Distance);
          }
       }
 

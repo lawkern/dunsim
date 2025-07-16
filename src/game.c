@@ -43,7 +43,9 @@ typedef struct {
    arena Scratch;
    random_entropy Entropy;
 
-   text_font Font;
+   text_font Varia_Font;
+   text_font Fixed_Font;
+
    game_texture Upstairs;
    game_texture Downstairs;
 
@@ -133,28 +135,33 @@ static void Draw_Bitmap(game_texture Destination, game_texture Source, float X, 
    }
 }
 
-static void Advance_Text_Line(text_font *Font, int *Y)
+static void Advance_Text_Line(text_font *Font, text_size Size, int *Y)
 {
-   float Line_Advance = Font->Scale * (Font->Ascent - Font->Descent + Font->Line_Gap);
+   float Scale = Font->Glyphs[Size].Scale;
+
+   float Line_Advance = Scale * (Font->Ascent - Font->Descent + Font->Line_Gap);
    *Y += Line_Advance;
 }
 
-static void Draw_Text(game_texture Destination, text_font *Font, int X, int Y, string Text)
+static void Draw_Text(game_texture Destination, text_font *Font, text_size Size, int X, int Y, string Text)
 {
    if(Font->Loaded)
    {
+      text_glyphs *Glyphs = Font->Glyphs + Size;
+      float Scale = Glyphs->Scale;
+
       for(size Index = 0; Index < Text.Length; ++Index)
       {
          int Codepoint = Text.Data[Index];
 
-         game_texture Glyph = Font->Glyphs[Codepoint];
+         game_texture Glyph = Glyphs->Bitmaps[Codepoint];
          Draw_Bitmap(Destination, Glyph, X, Y);
 
          if(Index != Text.Length-1)
          {
             int Next_Codepoint = Text.Data[Index + 1];
-            int Pair_Index = (Codepoint * Array_Count(Font->Glyphs)) + Next_Codepoint;
-            X += Font->Distances[Pair_Index];
+            int Pair_Index = (Codepoint * Glyph_Count) + Next_Codepoint;
+            X += (Scale * Font->Distances[Pair_Index]);
          }
       }
    }
@@ -305,8 +312,6 @@ UPDATE(Update)
    arena *Arena = &Game_State->Arena;
    arena *Scratch = &Game_State->Scratch;
    random_entropy *Entropy = &Game_State->Entropy;
-
-   text_font *Font = &Game_State->Font;
    map *Map = &Game_State->Map;
 
    if(!Arena->Begin)
@@ -350,8 +355,9 @@ UPDATE(Update)
       Game_State->Dragon.Position.X = 6;
       Game_State->Dragon.Position.Y = -8;
 
-      Load_Font(Font, Arena, *Scratch, "data/LiberationSans.ttf", 18);
-      if(!Font->Loaded)
+      Load_Font(&Game_State->Varia_Font, Arena, *Scratch, "data/Inter.ttf");
+      Load_Font(&Game_State->Fixed_Font, Arena, *Scratch, "data/JetBrainsMono.ttf");
+      if(!Game_State->Varia_Font.Loaded)
       {
          Log("During development, make sure to run the program from the project root folder.");
       }
@@ -544,35 +550,40 @@ UPDATE(Update)
 
    int Text_X = 5;
    int Text_Y = 5;
-   Advance_Text_Line(Font, &Text_Y);
-   Draw_Text(Backbuffer, Font, Text_X, Text_Y, S("Dungeon Simulator"));
+   text_size Text_Size = Text_Size_Large;
+   text_font *Font = &Game_State->Varia_Font;
+
+   Advance_Text_Line(Font, Text_Size, &Text_Y);
+   Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, S("Dungeon Simulator"));
 
    char Data[128];
    string Text = {0};
    Text.Data = (u8 *)Data;
+   Text_Size = Text_Size_Medium;
+   Font = &Game_State->Fixed_Font;
 
-   Advance_Text_Line(Font, &Text_Y);
-   Text.Length = snprintf(Data, sizeof(Data), "Frame Time: %3.3fms", Frame_Seconds * 1000.0f);
-   Draw_Text(Backbuffer, Font, Text_X, Text_Y, Text);
+   Advance_Text_Line(Font, Text_Size, &Text_Y);
+   Text.Length = snprintf(Data, sizeof(Data), "Frame Time: %3.3fms", Frame_Seconds*1000.0f);
+   Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
 
-   Advance_Text_Line(Font, &Text_Y);
+   Advance_Text_Line(Font, Text_Size, &Text_Y);
    Text.Length = snprintf(Data, sizeof(Data), "Camera: {%d, %d, %d}", Camera.X, Camera.Y, Camera.Z);
-   Draw_Text(Backbuffer, Font, Text_X, Text_Y, Text);
+   Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
+
+   Advance_Text_Line(Font, Text_Size, &Text_Y);
+   Text.Length = snprintf(Data, sizeof(Data), "Dragon: {%d, %d, %d}", Dragon->Position.X, Dragon->Position.Y, Dragon->Position.Z);
+   Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
 
    for(int Player_Index = 0; Player_Index < Array_Count(Game_State->Players); ++Player_Index)
    {
       player *Player = Game_State->Players + Player_Index;
       if(Player->Active)
       {
-         Advance_Text_Line(Font, &Text_Y);
-         Text.Length = snprintf(Data, sizeof(Data), "Player: %d {%d, %d, %d}", Player_Index, Player->Position.X, Player->Position.Y, Player->Position.Z);
-         Draw_Text(Backbuffer, Font, Text_X, Text_Y, Text);
+         Advance_Text_Line(Font, Text_Size, &Text_Y);
+         Text.Length = snprintf(Data, sizeof(Data), "Player %d: {%d, %d, %d}", Player_Index, Player->Position.X, Player->Position.Y, Player->Position.Z);
+         Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
       }
    }
-
-   Advance_Text_Line(Font, &Text_Y);
-   Text.Length = snprintf(Data, sizeof(Data), "Dragon: {%d, %d, %d}", Dragon->Position.X, Dragon->Position.Y, Dragon->Position.Z);
-   Draw_Text(Backbuffer, Font, Text_X, Text_Y, Text);
 
    int Gui_Dim = 16;
    int Gui_X = Backbuffer.Width - 2*Gui_Dim*GAME_CONTROLLER_COUNT;

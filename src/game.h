@@ -31,7 +31,7 @@ typedef struct {
 #define Megabytes(N) (1024 * Kilobytes(N))
 #define Gigabytes(N) (1024 * Megabytes(N))
 
-static void *Zero_Size(void *Result, size Size)
+static inline void *Zero_Size(void *Result, size Size)
 {
    u8 *Bytes = (u8 *)Result;
    while(Size--)
@@ -43,7 +43,7 @@ static void *Zero_Size(void *Result, size Size)
 
 #define Allocate(Arena, type, Count) (type *)Allocate_Size((Arena), (Count)*sizeof(type))
 
-static void *Allocate_Size(arena *Arena, size Size)
+static inline void *Allocate_Size(arena *Arena, size Size)
 {
    Assert(Arena->Begin < (Arena->End - Size));
 
