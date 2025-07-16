@@ -48,12 +48,10 @@ typedef struct {
    game_texture Downstairs;
 
    map Map;
+   position Camera;
+
    player Players[GAME_CONTROLLER_COUNT];
    dragon Dragon;
-
-   int Camera_X;
-   int Camera_Y;
-   int Camera_Z;
 } game_state;
 
 static void Clear(game_texture Destination, u32 Color)
@@ -135,9 +133,14 @@ static void Draw_Bitmap(game_texture Destination, game_texture Source, float X, 
    }
 }
 
+static void Advance_Text_Line(text_font *Font, int *Y)
+{
+   float Line_Advance = Font->Scale * (Font->Ascent - Font->Descent + Font->Line_Gap);
+   *Y += Line_Advance;
+}
+
 static void Draw_Text(game_texture Destination, text_font *Font, int X, int Y, string Text)
 {
-   // float Line_Advance = Font->Scale * (Font->Ascent - Font->Descent + Font->Line_Gap);
    if(Font->Loaded)
    {
       for(size Index = 0; Index < Text.Length; ++Index)
@@ -306,15 +309,17 @@ UPDATE(Update)
    text_font *Font = &Game_State->Font;
    map *Map = &Game_State->Map;
 
-   if(!Arena->Base)
+   if(!Arena->Begin)
    {
-      Arena->Size = Megabytes(64);
-      Arena->Base = Memory.Base + sizeof(*Game_State);
+      Arena->Begin = Memory.Base + sizeof(*Game_State);
+      Arena->End = Arena->Begin + Megabytes(64);
+      Log("Arena Size: %dMB", (Arena->End - Arena->Begin) >> 20);
 
-      Scratch->Size = Memory.Size - Arena->Size - sizeof(*Game_State);
-      Scratch->Base = Arena->Base + Arena->Size;
+      Scratch->Begin = Arena->End;
+      Scratch->End = Memory.Base + Memory.Size;
+      Log("Scratch Size: %dMB", (Scratch->End - Scratch->Begin) >> 20);
 
-      Assert((Scratch->Base + Scratch->Size) <= (Memory.Base + Memory.Size));
+      Assert(Scratch->Begin < Scratch->End);
 
       Game_State->Entropy = Random_Seed(0x13);
 
@@ -332,20 +337,20 @@ UPDATE(Update)
          }
       }
 
-      Game_State->Camera_X = 2;
-      Game_State->Camera_Y = 2;
+      Game_State->Camera.X = 2;
+      Game_State->Camera.Y = 2;
 
       for(int Player_Index = 0; Player_Index < Array_Count(Game_State->Players); ++Player_Index)
       {
          player *Player = Game_State->Players + Player_Index;
-         Player->Position.X = Game_State->Camera_X;
-         Player->Position.Y = Game_State->Camera_Y;
+         Player->Position.X = Game_State->Camera.X;
+         Player->Position.Y = Game_State->Camera.Y;
       }
 
       Game_State->Dragon.Position.X = 6;
       Game_State->Dragon.Position.Y = -8;
 
-      Load_Font(Font, Arena, *Scratch, "data/LiberationSans.ttf", 32);
+      Load_Font(Font, Arena, *Scratch, "data/LiberationSans.ttf", 18);
       if(!Font->Loaded)
       {
          Log("During development, make sure to run the program from the project root folder.");
@@ -376,10 +381,10 @@ UPDATE(Update)
             int Camera_Delta = 4;
             if(Is_Held(Controller->Shoulder_Right))
             {
-               if(Was_Pressed(Controller->Move_Up))    Game_State->Camera_Y -= Camera_Delta;
-               if(Was_Pressed(Controller->Move_Down))  Game_State->Camera_Y += Camera_Delta;
-               if(Was_Pressed(Controller->Move_Left))  Game_State->Camera_X -= Camera_Delta;
-               if(Was_Pressed(Controller->Move_Right)) Game_State->Camera_X += Camera_Delta;
+               if(Was_Pressed(Controller->Move_Up))    Game_State->Camera.Y -= Camera_Delta;
+               if(Was_Pressed(Controller->Move_Down))  Game_State->Camera.Y += Camera_Delta;
+               if(Was_Pressed(Controller->Move_Left))  Game_State->Camera.X -= Camera_Delta;
+               if(Was_Pressed(Controller->Move_Right)) Game_State->Camera.X += Camera_Delta;
             }
          }
          else if(!Player_Animating)
@@ -405,22 +410,25 @@ UPDATE(Update)
             // clear we even want to support diagonal movement, so this should
             // all be cleaned up.
 
-            if(Move(Map, &Player->Position, &Player->Animation, Delta_X, Delta_Y))
+            if(Delta_X || Delta_Y)
             {
-               Game_State->Camera_Z = Player->Position.Z;
+               if(Move(Map, &Player->Position, &Player->Animation, Delta_X, Delta_Y))
+               {
+                  Game_State->Camera.Z = Player->Position.Z;
+               }
             }
          }
 
          int Camera_Stick_Delta = 2;
-         Game_State->Camera_X += (Camera_Stick_Delta * Controller->Stick_Right_X);
-         Game_State->Camera_Y += (Camera_Stick_Delta * Controller->Stick_Right_Y);
+         Game_State->Camera.X += (Camera_Stick_Delta * Controller->Stick_Right_X);
+         Game_State->Camera.Y += (Camera_Stick_Delta * Controller->Stick_Right_Y);
 
          Advance_Animation(&Player->Animation, Frame_Seconds, 10.0f);
 
          if(Was_Pressed(Controller->Start))
          {
-            Game_State->Camera_X = Player->Position.X;
-            Game_State->Camera_Y = Player->Position.Y;
+            Game_State->Camera.X = Player->Position.X;
+            Game_State->Camera.Y = Player->Position.Y;
          }
       }
    }
@@ -443,37 +451,35 @@ UPDATE(Update)
    }
    Advance_Animation(&Dragon->Animation, Frame_Seconds, 5.0f);
 
-   int Camera_X = Game_State->Camera_X;
-   int Camera_Y = Game_State->Camera_Y;
-   int Camera_Z = Game_State->Camera_Z;
+   position Camera = Game_State->Camera;
 
    u32 Palettes[2][4] = {
       {0x000088FF, 0x0000CCFF, 0x0000FFFF, 0x008800FF},
       {0x008800FF, 0x00CC00FF, 0x00FF00FF, 0x000088FF},
    };
-   u32 *Palette = Palettes[Camera_Z];
+   u32 *Palette = Palettes[Camera.Z];
 
    Clear(Backbuffer, Palette[0]);
 
    // TODO: Loop over the surrounding chunks instead of tiles so that we don't
    // have to query for the chunk on each iteration.
-   int Min_X = Camera_X - MAP_CHUNK_DIM*2;
-   int Max_X = Camera_X + MAP_CHUNK_DIM*2;
+   int Min_X = Camera.X - MAP_CHUNK_DIM*2;
+   int Max_X = Camera.X + MAP_CHUNK_DIM*2;
 
-   int Min_Y = Camera_Y - MAP_CHUNK_DIM*2;
-   int Max_Y = Camera_Y + MAP_CHUNK_DIM*2;
+   int Min_Y = Camera.Y - MAP_CHUNK_DIM*2;
+   int Max_Y = Camera.Y + MAP_CHUNK_DIM*2;
 
    for(int Y = Min_Y; Y < Max_Y; ++Y)
    {
       for(int X = Min_X; X < Max_X; ++X)
       {
-         int Tile = Get_Map_Position_Value(Map, X, Y, Camera_Z);
-         int Pixel_X = Tile_Dim_Pixels*(X - Camera_X) + Backbuffer.Width/2;
-         int Pixel_Y = Tile_Dim_Pixels*(Y - Camera_Y) + Backbuffer.Height/2;
+         int Tile = Get_Map_Position_Value(Map, X, Y, Camera.Z);
+         int Pixel_X = Tile_Dim_Pixels*(X - Camera.X) + Backbuffer.Width/2;
+         int Pixel_Y = Tile_Dim_Pixels*(Y - Camera.Y) + Backbuffer.Height/2;
 
          if(Tile == 3)
          {
-            game_texture Bitmap = (Camera_Z == 0) ? Game_State->Upstairs : Game_State->Downstairs;
+            game_texture Bitmap = (Camera.Z == 0) ? Game_State->Upstairs : Game_State->Downstairs;
             Draw_Bitmap(Backbuffer, Bitmap, Pixel_X, Pixel_Y);
          }
          else
@@ -488,7 +494,7 @@ UPDATE(Update)
    for(int Player_Index = 0; Player_Index < Array_Count(Game_State->Players); ++Player_Index)
    {
       player *Player = Game_State->Players + Player_Index;
-      if(Player->Active && Player->Position.Z == Camera_Z)
+      if(Player->Active && Player->Position.Z == Camera.Z)
       {
 #if 1
          int Offset_X = Tile_Dim_Pixels * Player->Animation.Offset_X;
@@ -497,8 +503,8 @@ UPDATE(Update)
          int Offset_X = 0;
          int Offset_Y = 0;
 #endif
-         int Pixel_X = Tile_Dim_Pixels * (Player->Position.X - Camera_X) + Backbuffer.Width/2  - Offset_X;
-         int Pixel_Y = Tile_Dim_Pixels * (Player->Position.Y - Camera_Y) + Backbuffer.Height/2 - Offset_Y;
+         int Pixel_X = Tile_Dim_Pixels * (Player->Position.X - Camera.X) + Backbuffer.Width/2  - Offset_X;
+         int Pixel_Y = Tile_Dim_Pixels * (Player->Position.Y - Camera.Y) + Backbuffer.Height/2 - Offset_Y;
 
          Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Player_Pixel_Dim, Player_Pixel_Dim, 0x000088FF);
          Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Player_Pixel_Dim, Player_Pixel_Dim, 4*Border_Dim_Pixels, 0xFFFFFFFF);
@@ -520,7 +526,7 @@ UPDATE(Update)
       }
    }
 
-   if(Dragon->Position.Z == Camera_Z)
+   if(Dragon->Position.Z == Camera.Z)
    {
 #if 1
       int Offset_X = Tile_Dim_Pixels * Dragon->Animation.Offset_X;
@@ -530,17 +536,43 @@ UPDATE(Update)
       int Offset_Y = 0;
 #endif
 
-      int Pixel_X = Tile_Dim_Pixels * (Dragon->Position.X - Camera_X) + Backbuffer.Width/2 - Offset_X;
-      int Pixel_Y = Tile_Dim_Pixels * (Dragon->Position.Y - Camera_Y) + Backbuffer.Height/2 - Offset_Y;
+      int Pixel_X = Tile_Dim_Pixels * (Dragon->Position.X - Camera.X) + Backbuffer.Width/2 - Offset_X;
+      int Pixel_Y = Tile_Dim_Pixels * (Dragon->Position.Y - Camera.Y) + Backbuffer.Height/2 - Offset_Y;
       Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Player_Pixel_Dim, Player_Pixel_Dim, 0x880000FF);
       Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Player_Pixel_Dim, Player_Pixel_Dim, 4*Border_Dim_Pixels, 0xFF0000FF);
    }
 
    int Text_X = 5;
-   int Text_Y = Backbuffer.Height - 10;
-   Draw_Text(Backbuffer, Font, Text_X, Text_Y, (Camera_Z == 0)
-             ? S("Dungeon Simulator: Floor 1")
-             : S("Dungeon Simulator: Floor 2"));
+   int Text_Y = 5;
+   Advance_Text_Line(Font, &Text_Y);
+   Draw_Text(Backbuffer, Font, Text_X, Text_Y, S("Dungeon Simulator"));
+
+   char Data[128];
+   string Text = {0};
+   Text.Data = (u8 *)Data;
+
+   Advance_Text_Line(Font, &Text_Y);
+   Text.Length = snprintf(Data, sizeof(Data), "Frame Time: %3.3fms", Frame_Seconds * 1000.0f);
+   Draw_Text(Backbuffer, Font, Text_X, Text_Y, Text);
+
+   Advance_Text_Line(Font, &Text_Y);
+   Text.Length = snprintf(Data, sizeof(Data), "Camera: {%d, %d, %d}", Camera.X, Camera.Y, Camera.Z);
+   Draw_Text(Backbuffer, Font, Text_X, Text_Y, Text);
+
+   for(int Player_Index = 0; Player_Index < Array_Count(Game_State->Players); ++Player_Index)
+   {
+      player *Player = Game_State->Players + Player_Index;
+      if(Player->Active)
+      {
+         Advance_Text_Line(Font, &Text_Y);
+         Text.Length = snprintf(Data, sizeof(Data), "Player: %d {%d, %d, %d}", Player_Index, Player->Position.X, Player->Position.Y, Player->Position.Z);
+         Draw_Text(Backbuffer, Font, Text_X, Text_Y, Text);
+      }
+   }
+
+   Advance_Text_Line(Font, &Text_Y);
+   Text.Length = snprintf(Data, sizeof(Data), "Dragon: {%d, %d, %d}", Dragon->Position.X, Dragon->Position.Y, Dragon->Position.Z);
+   Draw_Text(Backbuffer, Font, Text_X, Text_Y, Text);
 
    int Gui_Dim = 16;
    int Gui_X = Backbuffer.Width - 2*Gui_Dim*GAME_CONTROLLER_COUNT;

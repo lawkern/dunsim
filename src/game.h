@@ -14,12 +14,11 @@ typedef struct {
    u8 *Data;
 } string;
 
-#define S(Chars) (string){sizeof(Chars)-1, (u8 *)Chars}
+#define S(Literal) (string){sizeof(Literal)-1, (u8 *)(Literal)}
 
 typedef struct {
-   size Size;
-   size Used;
-   u8 *Base;
+   u8 *Begin;
+   u8 *End;
 } arena;
 
 #define Assert(Cond) do { if(!(Cond)) { __builtin_trap(); } } while(0)
@@ -32,20 +31,24 @@ typedef struct {
 #define Megabytes(N) (1024 * Kilobytes(N))
 #define Gigabytes(N) (1024 * Megabytes(N))
 
+static void *Zero_Size(void *Result, size Size)
+{
+   u8 *Bytes = (u8 *)Result;
+   while(Size--)
+   {
+      *Bytes++ = 0;
+   }
+   return(Result);
+}
+
 #define Allocate(Arena, type, Count) (type *)Allocate_Size((Arena), (Count)*sizeof(type))
 
 static void *Allocate_Size(arena *Arena, size Size)
 {
-   void *Result = 0;
-   if((Arena->Size - Arena->Used) >= Size)
-   {
-      Result = Arena->Base + Arena->Used;
-      Arena->Used += Size;
-   }
-   else
-   {
-      Assert(0);
-   }
+   Assert(Arena->Begin < (Arena->End - Size));
+
+   void *Result = Zero_Size(Arena->Begin, Size);
+   Arena->Begin += Size;
 
    return(Result);
 }

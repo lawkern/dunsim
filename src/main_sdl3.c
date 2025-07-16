@@ -20,15 +20,8 @@ READ_ENTIRE_FILE(Read_Entire_File)
    if(Data && Size)
    {
       Result.Data = Allocate(Arena, u8, Size + 1);
-      if(Result.Data)
-      {
-         SDL_memcpy(Result.Data, Data, Size + 1);
-         Result.Length = Size;
-      }
-      else
-      {
-         SDL_Log("Failed to allocate for contents of file: %s", Path);
-      }
+      SDL_memcpy(Result.Data, Data, Size + 1);
+      Result.Length = Size;
 
       SDL_free(Data);
    }
@@ -253,18 +246,18 @@ int main(void)
                switch(Button_Event.button)
                {
                   // TODO: Confirm if other controllers map buttons on based name or position.
-                  case SDL_GAMEPAD_BUTTON_SOUTH:          {Sdl_Process_Button(&Controller->Action_Down, Button_Event.down);} break;
-                  case SDL_GAMEPAD_BUTTON_EAST:           {Sdl_Process_Button(&Controller->Action_Right, Button_Event.down);} break;
-                  case SDL_GAMEPAD_BUTTON_WEST:           {Sdl_Process_Button(&Controller->Action_Left, Button_Event.down);} break;
-                  case SDL_GAMEPAD_BUTTON_NORTH:          {Sdl_Process_Button(&Controller->Action_Up, Button_Event.down);} break;
-                  case SDL_GAMEPAD_BUTTON_DPAD_UP:        {Sdl_Process_Button(&Controller->Move_Up, Button_Event.down);} break;
-                  case SDL_GAMEPAD_BUTTON_DPAD_DOWN:      {Sdl_Process_Button(&Controller->Move_Down, Button_Event.down);} break;
-                  case SDL_GAMEPAD_BUTTON_DPAD_LEFT:      {Sdl_Process_Button(&Controller->Move_Left, Button_Event.down);} break;
-                  case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:     {Sdl_Process_Button(&Controller->Move_Right, Button_Event.down);} break;
-                  case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER:  {Sdl_Process_Button(&Controller->Shoulder_Left, Button_Event.down);} break;
-                  case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: {Sdl_Process_Button(&Controller->Shoulder_Right, Button_Event.down);} break;
-                  case SDL_GAMEPAD_BUTTON_START:          {Sdl_Process_Button(&Controller->Start, Button_Event.down);} break;
-                  case SDL_GAMEPAD_BUTTON_BACK:           {Sdl_Process_Button(&Controller->Back, Button_Event.down);} break;
+                  case SDL_GAMEPAD_BUTTON_SOUTH:          { Sdl_Process_Button(&Controller->Action_Down, Button_Event.down); } break;
+                  case SDL_GAMEPAD_BUTTON_EAST:           { Sdl_Process_Button(&Controller->Action_Right, Button_Event.down); } break;
+                  case SDL_GAMEPAD_BUTTON_WEST:           { Sdl_Process_Button(&Controller->Action_Left, Button_Event.down); } break;
+                  case SDL_GAMEPAD_BUTTON_NORTH:          { Sdl_Process_Button(&Controller->Action_Up, Button_Event.down); } break;
+                  case SDL_GAMEPAD_BUTTON_DPAD_UP:        { Sdl_Process_Button(&Controller->Move_Up, Button_Event.down); } break;
+                  case SDL_GAMEPAD_BUTTON_DPAD_DOWN:      { Sdl_Process_Button(&Controller->Move_Down, Button_Event.down); } break;
+                  case SDL_GAMEPAD_BUTTON_DPAD_LEFT:      { Sdl_Process_Button(&Controller->Move_Left, Button_Event.down); } break;
+                  case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:     { Sdl_Process_Button(&Controller->Move_Right, Button_Event.down); } break;
+                  case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER:  { Sdl_Process_Button(&Controller->Shoulder_Left, Button_Event.down); } break;
+                  case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: { Sdl_Process_Button(&Controller->Shoulder_Right, Button_Event.down); } break;
+                  case SDL_GAMEPAD_BUTTON_START:          { Sdl_Process_Button(&Controller->Start, Button_Event.down); } break;
+                  case SDL_GAMEPAD_BUTTON_BACK:           { Sdl_Process_Button(&Controller->Back, Button_Event.down); } break;
                }
             } break;
 
