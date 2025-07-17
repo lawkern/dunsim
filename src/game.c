@@ -46,6 +46,9 @@ typedef struct {
    text_font Varia_Font;
    text_font Fixed_Font;
 
+   int Active_Textbox_Index;
+   string Textbox_Dialogue[4];
+
    game_texture Upstairs;
    game_texture Downstairs;
 
@@ -143,6 +146,25 @@ static void Advance_Text_Line(text_font *Font, text_size Size, int *Y)
    *Y += Line_Advance;
 }
 
+static int Get_Text_Width(text_font *Font, text_size Size, string Text)
+{
+   int Result = 0;
+
+   float Scale = Font->Glyphs[Size].Scale;
+   for(size Index = 0; Index < Text.Length; ++Index)
+   {
+      if(Index != Text.Length-1)
+      {
+         int C0 = Text.Data[Index + 0];
+         int C1 = Text.Data[Index + 1];
+
+         Result += (Scale * Font->Distances[(C0 * Glyph_Count) + C1]);
+      }
+   }
+
+   return(Result);
+}
+
 static void Draw_Text(game_texture Destination, text_font *Font, text_size Size, int X, int Y, string Text)
 {
    if(Font->Loaded)
@@ -164,6 +186,78 @@ static void Draw_Text(game_texture Destination, text_font *Font, text_size Size,
             X += (Scale * Font->Distances[Pair_Index]);
          }
       }
+   }
+}
+
+static void Draw_Textbox(game_state *Game_State, game_texture Destination, string Text)
+{
+   text_font *Font = &Game_State->Varia_Font;
+   if(Font->Loaded)
+   {
+      text_size Size = Text_Size_Medium;
+      text_glyphs *Glyphs = Font->Glyphs + Size;
+
+      float Scale = Glyphs->Scale;
+      float Line_Advance = Scale * (Font->Ascent - Font->Descent + Font->Line_Gap);
+
+      int Margin = 10;
+      int Padding = 25;
+
+      int Line_Count = 1;
+      int Max_Line_Count = 6;
+
+      int Box_Width = Destination.Width - 2*Margin;
+      int Box_Height = Max_Line_Count*Line_Advance + 2*Padding;
+      int Box_X = Margin;
+      int Box_Y = Destination.Height - Margin - Box_Height;
+      Draw_Rectangle(Destination, Box_X, Box_Y, Box_Width, Box_Height, 0x000000FF);
+
+      int Text_X = Margin + Padding;
+      int Text_Y = Box_Y + Padding + Scale*Font->Ascent;
+
+      cut Words = {0};
+      Words.After = Text;
+      while(Words.After.Length)
+      {
+         Words = Cut(Words.After, ' ');
+         string Word = Words.Before;
+
+         int Width = Get_Text_Width(Font, Size, Word);
+         if((Box_X + Box_Width - Padding) < (Text_X + Width))
+         {
+            Text_X = Margin + Padding;
+            Advance_Text_Line(Font, Size, &Text_Y);
+            Line_Count++;
+         }
+
+         for(int Index = 0; Index < Word.Length; ++Index)
+         {
+            int Codepoint = Word.Data[Index];
+            if(Codepoint == '\n')
+            {
+               Text_X = Margin + Padding;
+               Advance_Text_Line(Font, Size, &Text_Y);
+               Line_Count++;
+            }
+            else
+            {
+               game_texture Glyph = Glyphs->Bitmaps[Codepoint];
+               Draw_Bitmap(Destination, Glyph, Text_X, Text_Y);
+
+               int Next_Codepoint = (Index != Word.Length-1) ? Word.Data[Index + 1] : ' ';
+               int Pair_Index = (Codepoint * Glyph_Count) + Next_Codepoint;
+               Text_X += (Scale * Font->Distances[Pair_Index]);
+            }
+         }
+
+         if(Words.After.Length)
+         {
+            int Next_Codepoint = Words.After.Data[0];
+            Text_X += (Scale * Font->Distances[(' ' * Glyph_Count) + Next_Codepoint]);
+         }
+      }
+
+      Assert(Line_Count <= Max_Line_Count);
    }
 }
 
@@ -318,11 +412,9 @@ UPDATE(Update)
    {
       Arena->Begin = Memory.Base + sizeof(*Game_State);
       Arena->End = Arena->Begin + Megabytes(64);
-      Log("Arena Size: %dMB", (Arena->End - Arena->Begin) >> 20);
 
       Scratch->Begin = Arena->End;
       Scratch->End = Memory.Base + Memory.Size;
-      Log("Scratch Size: %dMB", (Scratch->End - Scratch->Begin) >> 20);
 
       Assert(Scratch->Begin < Scratch->End);
 
@@ -364,6 +456,34 @@ UPDATE(Update)
 
       Game_State->Upstairs = Load_Image(Arena, "data/upstairs.png");
       Game_State->Downstairs = Load_Image(Arena, "data/downstairs.png");
+
+      Game_State->Textbox_Dialogue[1] = S(
+         "THE FIRST WORLD\n"
+         "Within the earth there was fire. "
+         "Mankind succumbed to greed and touched the forbidden sun. "
+         "The enslaved prayed, and the sun god appeared. "
+         "The earth god raged, and with its serpent of hellfire, shrouded the world in death and darkness. "
+         "And they will never meet."
+         );
+
+      Game_State->Textbox_Dialogue[2] = S(
+         "THE SECOND WORLD\n"
+         "Within the void there was breath. "
+         "The forest god tamed demons and the sun spread the fires of war. "
+         "Those of the half-moon dreamed. "
+         "Those of the moon dreamed. "
+         "Man killed the sun and became god, and the sea god stormed. "
+         "And they will never meet."
+         );
+
+      Game_State->Textbox_Dialogue[3] = S(
+         "THE THIRD WORLD\n"
+         "Within the chaos there was emptiness. "
+         "The inconvenient remnants recall the promised day and hear the voice of the half-moon. "
+         "The sun god dances and laughs, guiding the world to its end. "
+         "The sun returns and brings a new morning. "
+         "And they will surely meet."
+         );
    }
 
    // int Tile_Dim_Pixels = Backbuffer.Width / 40;
@@ -381,6 +501,15 @@ UPDATE(Update)
 
          bool Moving_Camera = Is_Held(Controller->Shoulder_Right);
          bool Player_Animating = (Player->Animation.Offset_X != 0.0f || Player->Animation.Offset_Y != 0.0f);
+
+         if(Was_Pressed(Controller->Action_Up))
+         {
+            Game_State->Active_Textbox_Index++;
+            if(Game_State->Active_Textbox_Index == Array_Count(Game_State->Textbox_Dialogue))
+            {
+               Game_State->Active_Textbox_Index = 0;
+            }
+         }
 
          if(Moving_Camera)
          {
@@ -585,9 +714,14 @@ UPDATE(Update)
       }
    }
 
+   if(Game_State->Active_Textbox_Index)
+   {
+      Draw_Textbox(Game_State, Backbuffer, Game_State->Textbox_Dialogue[Game_State->Active_Textbox_Index]);
+   }
+
    int Gui_Dim = 16;
    int Gui_X = Backbuffer.Width - 2*Gui_Dim*GAME_CONTROLLER_COUNT;
-   int Gui_Y = Backbuffer.Height - 2*Gui_Dim;
+   int Gui_Y = Gui_Dim;
 
    for(int Controller_Index = 0; Controller_Index < GAME_CONTROLLER_COUNT; ++Controller_Index)
    {

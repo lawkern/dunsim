@@ -16,6 +16,47 @@ typedef struct {
 
 #define S(Literal) (string){sizeof(Literal)-1, (u8 *)(Literal)}
 
+static string Span(u8 *Begin, u8 *End)
+{
+   string Result = {0};
+   Result.Data = Begin;
+   if(Begin)
+   {
+      Result.Length = End - Begin;
+   }
+
+   return(Result);
+}
+
+typedef struct {
+   string Before;
+   string After;
+   bool Found;
+} cut;
+
+static cut Cut(string String, u8 Separator)
+{
+   cut Result = {0};
+
+   if(String.Length > 0)
+   {
+      u8 *Begin = String.Data;
+      u8 *End = Begin + String.Length;
+
+      u8 *Cut_Position = Begin;
+      while(Cut_Position < End && *Cut_Position != Separator)
+      {
+         Cut_Position++;
+      }
+
+      Result.Found = (Cut_Position < End);
+      Result.Before = Span(Begin, Cut_Position);
+      Result.After = Span(Cut_Position + Result.Found, End);
+   }
+
+   return(Result);
+}
+
 typedef struct {
    u8 *Begin;
    u8 *End;
@@ -74,14 +115,14 @@ typedef struct {
 
 #define GAME_BUTTONS                            \
    X(Action_Up)                                 \
-      X(Action_Down)				\
-      X(Action_Left)				\
-      X(Action_Right)				\
-      X(Move_Up)				\
-      X(Move_Down)				\
-      X(Move_Left)				\
-      X(Move_Right)				\
-      X(Shoulder_Left)				\
+   X(Action_Down)                               \
+   X(Action_Left)                               \
+   X(Action_Right)                              \
+   X(Move_Up)                                   \
+   X(Move_Down)                                 \
+   X(Move_Left)                                 \
+   X(Move_Right)                                \
+   X(Shoulder_Left)                             \
    X(Shoulder_Right)                            \
    X(Start)                                     \
    X(Back)
@@ -127,21 +168,21 @@ typedef struct {
 
 static inline bool Is_Held(game_button Button)
 {
-   // NOTE(law): The specified button is currently pressed.
+   // NOTE: The specified button is currently pressed.
    bool Result = (Button.Pressed);
    return(Result);
 }
 
 static inline bool Was_Pressed(game_button Button)
 {
-   // NOTE(law): The specified button was pressed on this frame.
+   // NOTE: The specified button was pressed on this frame.
    bool Result = (Button.Pressed && Button.Transitioned);
    return(Result);
 }
 
 static inline bool Was_Released(game_button Button)
 {
-   // NOTE(law): The specified button was released on this frame.
+   // NOTE: The specified button was released on this frame.
    bool Result = (!Button.Pressed && Button.Transitioned);
    return(Result);
 }
