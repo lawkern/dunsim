@@ -27,16 +27,29 @@ typedef struct {
    int X, Y, Z;
 } position;
 
-typedef struct {
-   position Position;
-   animation Animation;
-   bool Active;
-} player;
+typedef enum {
+   Entity_Type_Null,
+   Entity_Type_Floor,
+   Entity_Type_Wall,
+   Entity_Type_Stairs,
+   Entity_Type_Camera,
+   Entity_Type_Player,
+   Entity_Type_Dragon,
+
+   Entity_Type_Count
+} entity_type;
 
 typedef struct {
+   entity_type Type;
+   string Name;
+
+   int Width;
+   int Height;
    position Position;
    animation Animation;
-} dragon;
+
+   bool Active;
+} entity;
 
 typedef struct {
    arena Arena;
@@ -55,8 +68,8 @@ typedef struct {
    map Map;
    position Camera;
 
-   player Players[GAME_CONTROLLER_COUNT];
-   dragon Dragon;
+   int Entity_Count;
+   entity Entities[2048];
 } game_state;
 
 static void Clear(game_texture Destination, u32 Color)
@@ -261,25 +274,29 @@ static void Draw_Textbox(game_state *Game_State, game_texture Destination, strin
    }
 }
 
-static bool Can_Move(map *Map, position *Position, int Delta_X, int Delta_Y)
+static bool Can_Move(map *Map, entity *Entity, int Delta_X, int Delta_Y)
 {
-   bool Result = false;
+   bool Result = true;
 
-   int New_X = Position->X + Delta_X;
-   int New_Y = Position->Y + Delta_Y;
-   int New_Z = Position->Z;
+   int Min_X = Entity->Position.X + Delta_X;
+   int Min_Y = Entity->Position.Y + Delta_Y;
 
-   int Tile_00 = Get_Map_Position_Value(Map, New_X, New_Y, New_Z);
-   int Tile_01 = Get_Map_Position_Value(Map, New_X + 1, New_Y, New_Z);
-   int Tile_10 = Get_Map_Position_Value(Map, New_X, New_Y + 1, New_Z);
-   int Tile_11 = Get_Map_Position_Value(Map, New_X + 1, New_Y + 1, New_Z);
+   int Max_X = Min_X + Entity->Width;
+   int Max_Y = Min_Y + Entity->Height;
 
-   if(!Position_Is_Occupied(Tile_00) &&
-      !Position_Is_Occupied(Tile_01) &&
-      !Position_Is_Occupied(Tile_10) &&
-      !Position_Is_Occupied(Tile_11))
+   int Z = Entity->Position.Z;
+
+   for(int Y = Min_Y; Y < Max_Y; ++Y)
    {
-      Result = true;
+      for(int X = Min_X; X < Max_X; ++X)
+      {
+         int Value = Get_Map_Position_Value(Map, X, Y, Z);
+         if(Position_Is_Occupied(Value))
+         {
+            Result = false;
+            break;
+         }
+      }
    }
 
    return(Result);
@@ -289,10 +306,15 @@ static bool Can_Ascend(map *Map, position *Position)
 {
    bool Result = false;
 
-   int Tile_00 = Get_Map_Position_Value(Map, Position->X, Position->Y, Position->Z);
-   int Tile_01 = Get_Map_Position_Value(Map, Position->X + 1, Position->Y, Position->Z);
-   int Tile_10 = Get_Map_Position_Value(Map, Position->X, Position->Y + 1, Position->Z);
-   int Tile_11 = Get_Map_Position_Value(Map, Position->X + 1, Position->Y + 1, Position->Z);
+   int X = Position->X;
+   int Y = Position->Y;
+   int Z = Position->Z;
+
+
+   int Tile_00 = Get_Map_Position_Value(Map, X, Y, Z);
+   int Tile_01 = Get_Map_Position_Value(Map, X+1, Y, Z);
+   int Tile_10 = Get_Map_Position_Value(Map, X, Y+1, Z);
+   int Tile_11 = Get_Map_Position_Value(Map, X+1, Y+1, Z);
 
    if(Tile_00 == 3 &&
       Tile_01 == 3 &&
@@ -305,41 +327,47 @@ static bool Can_Ascend(map *Map, position *Position)
    return(Result);
 }
 
-static bool Move(map *Map, position *Position, animation *Animation, int Delta_X, int Delta_Y)
+static bool Move(map *Map, entity *Entity, int Delta_X, int Delta_Y)
 {
    bool Ok = false;
+
+   animation *Animation = &Entity->Animation;
+   position *Position = &Entity->Position;
+
    if(Delta_X && Delta_Y)
    {
+      // TODO: This includes redundant checks just to support sliding along
+      // walls when moving into them diagonally. This could be much simpler.
       if(Animation->Direction == Direction_Right || Animation->Direction == Direction_Left)
       {
-         Ok = Can_Move(Map, Position, 0, Delta_Y);
+         Ok = Can_Move(Map, Entity, 0, Delta_Y);
          if(Ok)
          {
             Delta_X = 0;
          }
          else
          {
-            Ok = Can_Move(Map, Position, Delta_X, 0);
+            Ok = Can_Move(Map, Entity, Delta_X, 0);
             Delta_Y = 0;
          }
       }
       else
       {
-         Ok = Can_Move(Map, Position, Delta_X, 0);
+         Ok = Can_Move(Map, Entity, Delta_X, 0);
          if(Ok)
          {
             Delta_Y = 0;
          }
          else
          {
-            Ok = Can_Move(Map, Position, 0, Delta_Y);
+            Ok = Can_Move(Map, Entity, 0, Delta_Y);
             Delta_X = 0;
          }
       }
    }
    else
    {
-      Ok = Can_Move(Map, Position, Delta_X, Delta_Y);
+      Ok = Can_Move(Map, Entity, Delta_X, Delta_Y);
    }
 
    if     (Delta_X > 0) Animation->Direction = Direction_Right;
@@ -420,6 +448,20 @@ UPDATE(Update)
 
       Game_State->Entropy = Random_Seed(0x13);
 
+      Game_State->Camera.X = 2;
+      Game_State->Camera.Y = 2;
+
+      for(int Player_Index = 0; Player_Index < GAME_CONTROLLER_COUNT; ++Player_Index)
+      {
+         entity *Player = Game_State->Entities + Game_State->Entity_Count++;
+         Player->Type = Entity_Type_Player;
+         Player->Name = S("Player");
+         Player->Width = 2;
+         Player->Height = 2;
+         Player->Position.X = Game_State->Camera.X;
+         Player->Position.Y = Game_State->Camera.Y;
+      }
+
       for(int Chunk_Z = 0; Chunk_Z <= 1; ++Chunk_Z)
       {
          int Z = Chunk_Z;
@@ -434,18 +476,14 @@ UPDATE(Update)
          }
       }
 
-      Game_State->Camera.X = 2;
-      Game_State->Camera.Y = 2;
-
-      for(int Player_Index = 0; Player_Index < Array_Count(Game_State->Players); ++Player_Index)
-      {
-         player *Player = Game_State->Players + Player_Index;
-         Player->Position.X = Game_State->Camera.X;
-         Player->Position.Y = Game_State->Camera.Y;
-      }
-
-      Game_State->Dragon.Position.X = 6;
-      Game_State->Dragon.Position.Y = -8;
+      entity *Dragon = Game_State->Entities + Game_State->Entity_Count++;
+      Dragon->Type = Entity_Type_Dragon;
+      Dragon->Name = S("Dragon");
+      Dragon->Width = 3;
+      Dragon->Height = 3;
+      Dragon->Position.X = 6;
+      Dragon->Position.Y = -8;
+      Dragon->Active = true;
 
       Load_Font(&Game_State->Varia_Font, Arena, *Scratch, "data/Inter.ttf");
       Load_Font(&Game_State->Fixed_Font, Arena, *Scratch, "data/JetBrainsMono.ttf");
@@ -486,21 +524,15 @@ UPDATE(Update)
          );
    }
 
-   // int Tile_Dim_Pixels = Backbuffer.Width / 40;
-   int Tile_Dim_Pixels = Backbuffer.Height / 32;
-   int Border_Dim_Pixels = Maximum(1, Tile_Dim_Pixels / 16);
-
+   // General Input Handling.
    for(int Controller_Index = 0; Controller_Index < GAME_CONTROLLER_COUNT; ++Controller_Index)
    {
       game_controller *Controller = Input->Controllers + Controller_Index;
       if(Controller->Connected)
       {
-         Assert(GAME_CONTROLLER_COUNT == Array_Count(Game_State->Players));
-         player *Player = Game_State->Players + Controller_Index;
-         Player->Active = true;
+         entity *Player = Game_State->Entities + Controller_Index;
+         Player->Active = Controller->Connected;
 
-         bool Moving_Camera = Is_Held(Controller->Shoulder_Right);
-         bool Player_Animating = (Player->Animation.Offset_X != 0.0f || Player->Animation.Offset_Y != 0.0f);
 
          if(Was_Pressed(Controller->Action_Up))
          {
@@ -511,6 +543,7 @@ UPDATE(Update)
             }
          }
 
+         bool Moving_Camera = Is_Held(Controller->Shoulder_Right);
          if(Moving_Camera)
          {
             int Camera_Delta = 4;
@@ -522,43 +555,10 @@ UPDATE(Update)
                if(Was_Pressed(Controller->Move_Right)) Game_State->Camera.X += Camera_Delta;
             }
          }
-         else if(!Player_Animating)
-         {
-            bool Dash = Is_Held(Controller->Action_Down);
-            int Delta = (Dash) ? 2 : 1;
-
-            bool Up    = Is_Held(Controller->Move_Up);
-            bool Down  = Is_Held(Controller->Move_Down);
-            bool Left  = Is_Held(Controller->Move_Left);
-            bool Right = Is_Held(Controller->Move_Right);
-
-            int Delta_X = 0;
-            int Delta_Y = 0;
-
-            if(Up)    Delta_Y -= Delta;
-            if(Down)  Delta_Y += Delta;
-            if(Left)  Delta_X -= Delta;
-            if(Right) Delta_X += Delta;
-
-            // TODO: This includes a number of redundant checks just to support
-            // sliding along walls when moving into them diagonally. It's not
-            // clear we even want to support diagonal movement, so this should
-            // all be cleaned up.
-
-            if(Delta_X || Delta_Y)
-            {
-               if(Move(Map, &Player->Position, &Player->Animation, Delta_X, Delta_Y))
-               {
-                  Game_State->Camera.Z = Player->Position.Z;
-               }
-            }
-         }
 
          int Camera_Stick_Delta = 2;
          Game_State->Camera.X += (Camera_Stick_Delta * Controller->Stick_Right_X);
          Game_State->Camera.Y += (Camera_Stick_Delta * Controller->Stick_Right_Y);
-
-         Advance_Animation(&Player->Animation, Frame_Seconds, 10.0f);
 
          if(Was_Pressed(Controller->Start))
          {
@@ -568,26 +568,72 @@ UPDATE(Update)
       }
    }
 
-   dragon *Dragon = &Game_State->Dragon;
-   if(Dragon->Animation.Offset_X == 0.0f && Dragon->Animation.Offset_Y == 0.0f)
+   // Entity Update.
+   for(int Entity_Index = 0; Entity_Index < Game_State->Entity_Count; ++Entity_Index)
    {
-      int Delta_X = 0;
-      int Delta_Y = 0;
-      switch(Random_Range(Entropy, Direction_None, Direction_Count-1))
+      entity *Entity = Game_State->Entities + Entity_Index;
+      if(Entity->Active)
       {
-         case Direction_Up:    Delta_Y--; break;
-         case Direction_Down:  Delta_Y++; break;
-         case Direction_Left:  Delta_X--; break;
-         case Direction_Right: Delta_X++; break;
-         default: break;
-      }
+         switch(Entity->Type)
+         {
+            case Entity_Type_Player: {
+               if(Entity->Animation.Offset_X == 0.0f && Entity->Animation.Offset_Y == 0.0f)
+               {
+                  game_controller *Controller = Input->Controllers + Entity_Index;
+                  bool Dash = Is_Held(Controller->Action_Down);
+                  int Delta = (Dash) ? 2 : 1;
 
-      Move(Map, &Dragon->Position, &Dragon->Animation, Delta_X, Delta_Y);
+                  bool Up    = Is_Held(Controller->Move_Up);
+                  bool Down  = Is_Held(Controller->Move_Down);
+                  bool Left  = Is_Held(Controller->Move_Left);
+                  bool Right = Is_Held(Controller->Move_Right);
+
+                  int Delta_X = 0;
+                  int Delta_Y = 0;
+
+                  if(Up)    Delta_Y -= Delta;
+                  if(Down)  Delta_Y += Delta;
+                  if(Left)  Delta_X -= Delta;
+                  if(Right) Delta_X += Delta;
+
+                  if((Delta_X || Delta_Y) && Move(Map, Entity, Delta_X, Delta_Y))
+                  {
+                     Game_State->Camera.Z = Entity->Position.Z;
+                  }
+               }
+               Advance_Animation(&Entity->Animation, Frame_Seconds, 10.0f);
+            } break;
+
+            case Entity_Type_Dragon: {
+               if(Entity->Animation.Offset_X == 0.0f && Entity->Animation.Offset_Y == 0.0f)
+               {
+                  int Delta_X = 0;
+                  int Delta_Y = 0;
+                  switch(Random_Range(Entropy, Direction_None, Direction_Count-1))
+                  {
+                     case Direction_Up:    Delta_Y--; break;
+                     case Direction_Down:  Delta_Y++; break;
+                     case Direction_Left:  Delta_X--; break;
+                     case Direction_Right: Delta_X++; break;
+                     default: break;
+                  }
+                  if((Delta_X || Delta_Y) && Move(Map, Entity, Delta_X, Delta_Y))
+                  {
+                     // ...
+                  }
+               }
+               Advance_Animation(&Entity->Animation, Frame_Seconds, 5.0f);
+            } break;
+
+            default: {
+            } break;
+         }
+      }
    }
-   Advance_Animation(&Dragon->Animation, Frame_Seconds, 5.0f);
 
    position Camera = Game_State->Camera;
 
+   // Rendering
    u32 Palettes[2][4] = {
       {0x000088FF, 0x0000CCFF, 0x0000FFFF, 0x008800FF},
       {0x008800FF, 0x00CC00FF, 0x00FF00FF, 0x000088FF},
@@ -604,13 +650,16 @@ UPDATE(Update)
    int Min_Y = Camera.Y - MAP_CHUNK_DIM*2;
    int Max_Y = Camera.Y + MAP_CHUNK_DIM*2;
 
+   int Tile_Pixels = Backbuffer.Height / 32;
+   int Border_Pixels = Maximum(1, Tile_Pixels / 16);
+
    for(int Y = Min_Y; Y < Max_Y; ++Y)
    {
       for(int X = Min_X; X < Max_X; ++X)
       {
          int Tile = Get_Map_Position_Value(Map, X, Y, Camera.Z);
-         int Pixel_X = Tile_Dim_Pixels*(X - Camera.X) + Backbuffer.Width/2;
-         int Pixel_Y = Tile_Dim_Pixels*(Y - Camera.Y) + Backbuffer.Height/2;
+         int Pixel_X = Tile_Pixels*(X - Camera.X) + Backbuffer.Width/2;
+         int Pixel_Y = Tile_Pixels*(Y - Camera.Y) + Backbuffer.Height/2;
 
          if(Tile == 3)
          {
@@ -619,64 +668,65 @@ UPDATE(Update)
          }
          else
          {
-            Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Tile_Dim_Pixels, Tile_Dim_Pixels, Palette[Tile]);
-            Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Tile_Dim_Pixels, Tile_Dim_Pixels, Border_Dim_Pixels, Palette[1]);
+            Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Tile_Pixels, Tile_Pixels, Palette[Tile]);
+            Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Tile_Pixels, Tile_Pixels, Border_Pixels, Palette[1]);
          }
       }
    }
 
-   int Player_Pixel_Dim = 2 * Tile_Dim_Pixels;
-   for(int Player_Index = 0; Player_Index < Array_Count(Game_State->Players); ++Player_Index)
+   for(int Entity_Index = 0; Entity_Index < Game_State->Entity_Count; ++Entity_Index)
    {
-      player *Player = Game_State->Players + Player_Index;
-      if(Player->Active && Player->Position.Z == Camera.Z)
+      entity *Entity = Game_State->Entities + Entity_Index;
+      if(Entity->Active && Entity->Position.Z == Camera.Z)
       {
+         int Pixel_Width  = Entity->Width * Tile_Pixels;
+         int Pixel_Height = Entity->Height * Tile_Pixels;
 #if 1
-         int Offset_X = Tile_Dim_Pixels * Player->Animation.Offset_X;
-         int Offset_Y = Tile_Dim_Pixels * Player->Animation.Offset_Y;
+         int Offset_X = Tile_Pixels * Entity->Animation.Offset_X;
+         int Offset_Y = Tile_Pixels * Entity->Animation.Offset_Y;
 #else
          int Offset_X = 0;
          int Offset_Y = 0;
 #endif
-         int Pixel_X = Tile_Dim_Pixels * (Player->Position.X - Camera.X) + Backbuffer.Width/2  - Offset_X;
-         int Pixel_Y = Tile_Dim_Pixels * (Player->Position.Y - Camera.Y) + Backbuffer.Height/2 - Offset_Y;
 
-         Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Player_Pixel_Dim, Player_Pixel_Dim, 0x000088FF);
-         Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Player_Pixel_Dim, Player_Pixel_Dim, 4*Border_Dim_Pixels, 0xFFFFFFFF);
+         int Pixel_X = Tile_Pixels * (Entity->Position.X - Camera.X) + Backbuffer.Width/2 - Offset_X;
+         int Pixel_Y = Tile_Pixels * (Entity->Position.Y - Camera.Y) + Backbuffer.Height/2 - Offset_Y;
 
-         int Half_Dim = Player_Pixel_Dim/2;
-         int Nose_Dim = 4 * Border_Dim_Pixels;
-         int Nose_X = Pixel_X + Half_Dim - Nose_Dim/2;
-         int Nose_Y = Pixel_Y + Half_Dim - Nose_Dim/2;
-
-         switch(Player->Animation.Direction)
+         int Nose_Dim = 4 * Border_Pixels;
+         int Nose_X = Pixel_X + Pixel_Width/2  - Nose_Dim/2;
+         int Nose_Y = Pixel_Y + Pixel_Height/2 - Nose_Dim/2;
+         switch(Entity->Animation.Direction)
          {
-            case Direction_Up:    { Nose_Y -= (Half_Dim - Nose_Dim/2); } break;
-            case Direction_Down:  { Nose_Y += (Half_Dim - Nose_Dim/2); } break;
-            case Direction_Left:  { Nose_X -= (Half_Dim - Nose_Dim/2); } break;
-            case Direction_Right: { Nose_X += (Half_Dim - Nose_Dim/2); } break;
+            case Direction_Up:    { Nose_Y -= (Pixel_Height/2 - Nose_Dim/2); } break;
+            case Direction_Down:  { Nose_Y += (Pixel_Height/2 - Nose_Dim/2); } break;
+            case Direction_Left:  { Nose_X -= (Pixel_Width/2  - Nose_Dim/2); } break;
+            case Direction_Right: { Nose_X += (Pixel_Width/2  - Nose_Dim/2); } break;
             default: {} break;
          }
-         Draw_Rectangle(Backbuffer, Nose_X, Nose_Y, Nose_Dim, Nose_Dim, 0x0000FFFF);
+
+         switch(Entity->Type)
+         {
+            case Entity_Type_Player: {
+               Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 0x000088FF);
+               Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 4*Border_Pixels, 0xFFFFFFFF);
+
+               Draw_Rectangle(Backbuffer, Nose_X, Nose_Y, Nose_Dim, Nose_Dim, 0x0000FFFF);
+            } break;
+
+            case Entity_Type_Dragon: {
+               Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 0x880000FF);
+               Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 4*Border_Pixels, 0xFF0000FF);
+
+               Draw_Rectangle(Backbuffer, Nose_X, Nose_Y, Nose_Dim, Nose_Dim, 0xFFFF00FF);
+            } break;
+
+            default: {
+            } break;
+         }
       }
    }
 
-   if(Dragon->Position.Z == Camera.Z)
-   {
-#if 1
-      int Offset_X = Tile_Dim_Pixels * Dragon->Animation.Offset_X;
-      int Offset_Y = Tile_Dim_Pixels * Dragon->Animation.Offset_Y;
-#else
-      int Offset_X = 0;
-      int Offset_Y = 0;
-#endif
-
-      int Pixel_X = Tile_Dim_Pixels * (Dragon->Position.X - Camera.X) + Backbuffer.Width/2 - Offset_X;
-      int Pixel_Y = Tile_Dim_Pixels * (Dragon->Position.Y - Camera.Y) + Backbuffer.Height/2 - Offset_Y;
-      Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Player_Pixel_Dim, Player_Pixel_Dim, 0x880000FF);
-      Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Player_Pixel_Dim, Player_Pixel_Dim, 4*Border_Dim_Pixels, 0xFF0000FF);
-   }
-
+   // User Interface.
    int Text_X = 5;
    int Text_Y = 5;
    text_size Text_Size = Text_Size_Large;
@@ -699,17 +749,19 @@ UPDATE(Update)
    Text.Length = snprintf(Data, sizeof(Data), "Camera: {%d, %d, %d}", Camera.X, Camera.Y, Camera.Z);
    Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
 
-   Advance_Text_Line(Font, Text_Size, &Text_Y);
-   Text.Length = snprintf(Data, sizeof(Data), "Dragon: {%d, %d, %d}", Dragon->Position.X, Dragon->Position.Y, Dragon->Position.Z);
-   Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
-
-   for(int Player_Index = 0; Player_Index < Array_Count(Game_State->Players); ++Player_Index)
+   for(int Entity_Index = 0; Entity_Index < Game_State->Entity_Count; ++Entity_Index)
    {
-      player *Player = Game_State->Players + Player_Index;
-      if(Player->Active)
+      entity *Entity = Game_State->Entities + Entity_Index;
+      if(Entity->Active)
       {
          Advance_Text_Line(Font, Text_Size, &Text_Y);
-         Text.Length = snprintf(Data, sizeof(Data), "Player %d: {%d, %d, %d}", Player_Index, Player->Position.X, Player->Position.Y, Player->Position.Z);
+         Text.Length = snprintf(Data, sizeof(Data), "%.*s: {%d, %d, %d}",
+                                (int)Entity->Name.Length,
+                                Entity->Name.Data,
+                                Entity->Position.X,
+                                Entity->Position.Y,
+                                Entity->Position.Z);
+
          Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
       }
    }
@@ -734,7 +786,7 @@ UPDATE(Update)
       else
       {
          Draw_Rectangle(Backbuffer, Gui_X, Gui_Y, Gui_Dim, Gui_Dim, 0x004400FF);
-         Draw_Outline(Backbuffer, Gui_X, Gui_Y, Gui_Dim, Gui_Dim, 2*Border_Dim_Pixels, 0x00FF00FF);
+         Draw_Outline(Backbuffer, Gui_X, Gui_Y, Gui_Dim, Gui_Dim, 2*Border_Pixels, 0x00FF00FF);
       }
       Gui_X += (2 * Gui_Dim);
    }
