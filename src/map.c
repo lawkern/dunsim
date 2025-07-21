@@ -2,27 +2,11 @@
 
 #define MAP_CHUNK_DIM 16
 typedef struct {
-   int Positions[MAP_CHUNK_DIM][MAP_CHUNK_DIM];
-} map_chunk;
+   // int Positions[MAP_CHUNK_DIM][MAP_CHUNK_DIM];
 
-static map_chunk Debug_Map_Chunk = {{
-      {2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2},
-      {2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2},
-      {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 2, 2},
-      {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 2, 2},
-      {2, 2, 1, 1, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
-      {2, 2, 1, 1, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
-      {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
-      {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
-      {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
-      {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
-      {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 1, 1, 2, 2},
-      {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 1, 1, 2, 2},
-      {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
-      {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
-      {2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2},
-      {2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2},
-   }};
+   int Entity_Count;
+   int Entity_Indices[256];
+} map_chunk;
 
 typedef struct {
    int X, Y, Z;
@@ -34,6 +18,25 @@ typedef struct {
    map_chunk_coordinate Coordinates[1 << MAP_CHUNK_COUNT_POW2];
    map_chunk                 Chunks[1 << MAP_CHUNK_COUNT_POW2];
 } map;
+
+static int Debug_Map_Chunk[MAP_CHUNK_DIM][MAP_CHUNK_DIM] = {
+   {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2},
+   {2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2},
+   {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 2, 2},
+   {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 2, 2},
+   {2, 2, 1, 1, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
+   {2, 2, 1, 1, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
+   {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
+   {2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2},
+   {2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2},
+   {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
+   {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 1, 1, 2, 2},
+   {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 1, 1, 2, 2},
+   {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
+   {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
+   {2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2},
+   {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2},
+};
 
 static u64 Hash_Chunk_Coordinate(int Chunk_X, int Chunk_Y, int Chunk_Z)
 {
@@ -71,13 +74,9 @@ static u64 Hash_Chunk_Coordinate(int Chunk_X, int Chunk_Y, int Chunk_Z)
    return(Result);
 }
 
-static map_chunk *Get_Map_Chunk(map *Map, int X, int Y, int Z, bool Insert_If_Not_Found)
+static map_chunk *Get_Map_Chunk_By_Chunk(map *Map, int Chunk_X, int Chunk_Y, int Chunk_Z, bool Insert_If_Not_Found)
 {
    map_chunk *Result = 0;
-
-   int Chunk_X = (int)Floor((float)X / MAP_CHUNK_DIM);
-   int Chunk_Y = (int)Floor((float)Y / MAP_CHUNK_DIM);
-   int Chunk_Z = Z;
 
    u64 Hash = Hash_Chunk_Coordinate(Chunk_X, Chunk_Y, Chunk_Z);
    u32 Mask = (1 << MAP_CHUNK_COUNT_POW2) - 1;
@@ -113,39 +112,30 @@ static map_chunk *Get_Map_Chunk(map *Map, int X, int Y, int Z, bool Insert_If_No
    return(Result);
 }
 
+static map_chunk *Get_Map_Chunk(map *Map, int X, int Y, int Z, bool Insert_If_Not_Found)
+{
+   int Chunk_X = (int)Floor((float)X / MAP_CHUNK_DIM);
+   int Chunk_Y = (int)Floor((float)Y / MAP_CHUNK_DIM);
+   int Chunk_Z = Z;
+
+   map_chunk *Result = Get_Map_Chunk_By_Chunk(Map, Chunk_X, Chunk_Y, Chunk_Z, Insert_If_Not_Found);
+   return(Result);
+}
+
 static map_chunk *Query_Map_Chunk(map *Map, int X, int Y, int Z)
 {
    map_chunk *Result = Get_Map_Chunk(Map, X, Y, Z, false);
    return(Result);
 }
 
+static map_chunk *Query_Map_Chunk_By_Chunk(map *Map, int Chunk_X, int Chunk_Y, int Chunk_Z)
+{
+   map_chunk *Result = Get_Map_Chunk_By_Chunk(Map, Chunk_X, Chunk_Y, Chunk_Z, false);
+   return(Result);
+}
+
 static map_chunk *Insert_Map_Chunk(map *Map, int X, int Y, int Z)
 {
    map_chunk *Result = Get_Map_Chunk(Map, X, Y, Z, true);
-   return(Result);
-}
-
-static int Get_Map_Position_Value(map *Map, int X, int Y, int Z)
-{
-   int Result = 0;
-
-   map_chunk *Chunk = Query_Map_Chunk(Map, X, Y, Z);
-   if(Chunk)
-   {
-      int Relative_X = X % MAP_CHUNK_DIM;
-      int Relative_Y = Y % MAP_CHUNK_DIM;
-
-      if(Relative_X < 0) Relative_X += MAP_CHUNK_DIM;
-      if(Relative_Y < 0) Relative_Y += MAP_CHUNK_DIM;
-
-      Result = Chunk->Positions[Relative_Y][Relative_X];
-   }
-
-   return(Result);
-}
-
-static bool Position_Is_Occupied(int Position_Value)
-{
-   bool Result = (Position_Value == 0 || Position_Value == 2);
    return(Result);
 }

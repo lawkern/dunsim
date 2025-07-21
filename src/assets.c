@@ -14,10 +14,10 @@ typedef enum {
    Text_Size_Count,
 } text_size;
 
-#define Glyph_Count 128
+#define GLYPH_COUNT 128
 typedef struct {
    float Scale;
-   game_texture Bitmaps[Glyph_Count];
+   game_texture Bitmaps[GLYPH_COUNT];
 } text_glyphs;
 
 typedef struct {
@@ -31,7 +31,7 @@ typedef struct {
    bool Loaded;
 } text_font;
 
-static void Load_Font(text_font *Result, arena *Arena, arena Scratch, char *Path)
+static void Load_Font(text_font *Result, arena *Arena, arena Scratch, char *Path, int Pixel_Height)
 {
    string Font = Read_Entire_File(&Scratch, Path);
    if(Font.Length)
@@ -46,7 +46,6 @@ static void Load_Font(text_font *Result, arena *Arena, arena Scratch, char *Path
       Result->Descent = Descent;
       Result->Line_Gap = Line_Gap;
 
-      int Pixel_Height = 16;
       for(int Size_Index = 0; Size_Index < Text_Size_Count; ++Size_Index)
       {
          text_glyphs *Glyphs = Result->Glyphs + Size_Index;
@@ -75,7 +74,7 @@ static void Load_Font(text_font *Result, arena *Arena, arena Scratch, char *Path
          }
       }
 
-      int Distance_Count = Glyph_Count * Glyph_Count;
+      int Distance_Count = GLYPH_COUNT * GLYPH_COUNT;
       Result->Distances = Allocate(Arena, float, Distance_Count);
 
       for(int C0 = ' '; C0 <= '~'; ++C0)
@@ -86,7 +85,7 @@ static void Load_Font(text_font *Result, arena *Arena, arena Scratch, char *Path
          for(int C1 = ' '; C1 <= '~'; ++C1)
          {
             int Kerning_Distance = stbtt_GetCodepointKernAdvance(&Info, C0, C1);
-            Result->Distances[C0 * Glyph_Count + C1] = (float)(Advance_Width + Kerning_Distance);
+            Result->Distances[C0 * GLYPH_COUNT + C1] = (float)(Advance_Width + Kerning_Distance);
          }
       }
 
