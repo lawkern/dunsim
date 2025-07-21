@@ -70,6 +70,8 @@ typedef struct {
 
    int Entity_Count;
    entity Entities[1024*1024];
+
+   entity *Selected_Debug_Entity;
 } game_state;
 
 static void Clear(game_texture Destination, u32 Color)
@@ -419,7 +421,9 @@ UPDATE(Update)
    random_entropy *Entropy = &Game_State->Entropy;
    map *Map = &Game_State->Map;
 
-   int Tile_Pixels = Backbuffer.Height / 32;
+   int Tile_Count_X = 40;
+   int Tile_Pixels = Backbuffer.Width / Tile_Count_X;
+   int Tile_Count_Y = Backbuffer.Height / Tile_Pixels;
 
    if(!Arena->Begin)
    {
@@ -699,6 +703,9 @@ UPDATE(Update)
    }
 #endif
 
+   int Mouse_X_Pixel = Input->Mouse_X * (float)Backbuffer.Width;
+   int Mouse_Y_Pixel = Input->Mouse_Y * (float)Backbuffer.Height;
+
    for(int Chunk_Y = -1; Chunk_Y <= 1; ++Chunk_Y)
    {
       for(int Chunk_X = -1; Chunk_X <= 1; ++Chunk_X)
@@ -725,6 +732,15 @@ UPDATE(Update)
 
                   int Pixel_X = Tile_Pixels * (Entity->Position.X - Camera.X) + Backbuffer.Width/2 - Offset_X;
                   int Pixel_Y = Tile_Pixels * (Entity->Position.Y - Camera.Y) + Backbuffer.Height/2 - Offset_Y;
+
+                  if(Was_Pressed(Input->Mouse_Button_Left))
+                  {
+                     if(Mouse_X_Pixel >= Pixel_X && Mouse_X_Pixel < (Pixel_X + Pixel_Width) &&
+                        Mouse_Y_Pixel >= Pixel_Y && Mouse_Y_Pixel < (Pixel_Y + Pixel_Height))
+                     {
+                        Game_State->Selected_Debug_Entity = (Entity != Game_State->Selected_Debug_Entity) ? Entity : 0;
+                     }
+                  }
 
                   int Nose_Dim = 4 * Border_Pixels;
                   int Nose_X = Pixel_X + Pixel_Width/2  - Nose_Dim/2;
@@ -771,6 +787,11 @@ UPDATE(Update)
                      default: {
                      } break;
                   }
+
+                  if(Entity == Game_State->Selected_Debug_Entity)
+                  {
+                     Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 4*Border_Pixels, 0x00FF00FF);
+                  }
                }
             }
          }
@@ -801,16 +822,25 @@ UPDATE(Update)
    Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
 
    Advance_Text_Line(Font, Text_Size, &Text_Y);
-   Text.Length = snprintf(Data, sizeof(Data), "Mouse Buttons: {%c, %c, %c}",
-                          Is_Held(Input->Mouse_Button_Left)   ? 'd' : 'u',
-                          Is_Held(Input->Mouse_Button_Middle) ? 'd' : 'u',
-                          Is_Held(Input->Mouse_Button_Right)  ? 'd' : 'u');
-   Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
-
-   Advance_Text_Line(Font, Text_Size, &Text_Y);
    Text.Length = snprintf(Data, sizeof(Data), "Camera: {%d, %d, %d}", Camera.X, Camera.Y, Camera.Z);
    Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
 
+   if(Game_State->Selected_Debug_Entity)
+   {
+      Advance_Text_Line(Font, Text_Size, &Text_Y);
+      Text.Length = snprintf(Data, sizeof(Data), "%.*s: {X:%d, Y:%d, Z:%d, W:%d, H:%d} (SELECTED)",
+                             (int)Game_State->Selected_Debug_Entity->Name.Length,
+                             Game_State->Selected_Debug_Entity->Name.Data,
+                             Game_State->Selected_Debug_Entity->Position.X,
+                             Game_State->Selected_Debug_Entity->Position.Y,
+                             Game_State->Selected_Debug_Entity->Position.Z,
+                             Game_State->Selected_Debug_Entity->Width,
+                             Game_State->Selected_Debug_Entity->Height);
+
+      Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
+   }
+
+#if 0
    for(int Entity_Index = 0; Entity_Index < Game_State->Entity_Count; ++Entity_Index)
    {
       entity *Entity = Game_State->Entities + Entity_Index;
@@ -837,6 +867,7 @@ UPDATE(Update)
          }
       }
    }
+#endif
 
    if(Game_State->Active_Textbox_Index)
    {

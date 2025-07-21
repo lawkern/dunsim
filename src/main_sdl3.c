@@ -351,15 +351,6 @@ int main(void)
          }
       }
 
-      SDL_GetMouseState(&Input->Mouse_X, &Input->Mouse_Y);
-
-      // Update game state.
-      Update(Memory, Backbuffer, Input, Sdl.Actual_Frame_Seconds);
-
-      // Render frame.
-      SDL_SetRenderDrawColor(Sdl.Renderer, 0, 0, 0, 255);
-      SDL_RenderClear(Sdl.Renderer);
-
       int Dst_Width, Dst_Height;
       SDL_GetCurrentRenderOutputSize(Sdl.Renderer, &Dst_Width, &Dst_Height);
 
@@ -369,17 +360,29 @@ int main(void)
       if(Src_Aspect > Dst_Aspect)
       {
          // NOTE: Bars on top and bottom.
-         int bar_height = (int)(0.5f * (Dst_Height - (Dst_Width / Src_Aspect)));
-         Dst_Rect.y += bar_height;
-         Dst_Rect.h -= (bar_height * 2);
+         int Bar_Height = (int)(0.5f * (Dst_Height - (Dst_Width / Src_Aspect)));
+         Dst_Rect.y += Bar_Height;
+         Dst_Rect.h -= (Bar_Height * 2);
       }
       else if(Src_Aspect < Dst_Aspect)
       {
          // NOTE: Bars on left and right;
-         int bar_width = (int)(0.5f * (Dst_Width - (Dst_Height * Src_Aspect)));
-         Dst_Rect.x += bar_width;
-         Dst_Rect.w -= (bar_width * 2);
+         int Bar_Width = (int)(0.5f * (Dst_Width - (Dst_Height * Src_Aspect)));
+         Dst_Rect.x += Bar_Width;
+         Dst_Rect.w -= (Bar_Width * 2);
       }
+
+      float Raw_Mouse_X, Raw_Mouse_Y;
+      SDL_GetMouseState(&Raw_Mouse_X, &Raw_Mouse_Y);
+      Input->Mouse_X = (Raw_Mouse_X - Dst_Rect.x) / Dst_Rect.w;
+      Input->Mouse_Y = (Raw_Mouse_Y - Dst_Rect.y) / Dst_Rect.h;
+
+      // Update game state.
+      Update(Memory, Backbuffer, Input, Sdl.Actual_Frame_Seconds);
+
+      // Render frame.
+      SDL_SetRenderDrawColor(Sdl.Renderer, 0, 0, 0, 255);
+      SDL_RenderClear(Sdl.Renderer);
 
       SDL_UpdateTexture(Sdl.Texture, 0, Backbuffer.Memory, Backbuffer.Width * sizeof(*Backbuffer.Memory));
       SDL_RenderTexture(Sdl.Renderer, Sdl.Texture, 0, &Dst_Rect);
