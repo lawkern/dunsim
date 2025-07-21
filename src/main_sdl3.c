@@ -234,6 +234,17 @@ int main(void)
                }
             } break;
 
+            case SDL_EVENT_MOUSE_BUTTON_UP:
+            case SDL_EVENT_MOUSE_BUTTON_DOWN: {
+               SDL_MouseButtonEvent Button_Event = Event.button;
+               switch(Button_Event.button)
+               {
+                  case SDL_BUTTON_LEFT:   { Sdl_Process_Button(&Input->Mouse_Button_Left, Button_Event.down); } break;
+                  case SDL_BUTTON_MIDDLE: { Sdl_Process_Button(&Input->Mouse_Button_Middle, Button_Event.down); } break;
+                  case SDL_BUTTON_RIGHT:  { Sdl_Process_Button(&Input->Mouse_Button_Right, Button_Event.down); } break;
+               }
+            } break;
+
             case SDL_EVENT_GAMEPAD_BUTTON_UP:
             case SDL_EVENT_GAMEPAD_BUTTON_DOWN: {
                SDL_GamepadButtonEvent Button_Event = Event.gbutton;
@@ -340,6 +351,8 @@ int main(void)
          }
       }
 
+      SDL_GetMouseState(&Input->Mouse_X, &Input->Mouse_Y);
+
       // Update game state.
       Update(Memory, Backbuffer, Input, Sdl.Actual_Frame_Seconds);
 
@@ -375,16 +388,7 @@ int main(void)
       // End of frame.
       Input_Index++;
       if(Input_Index == Array_Count(Inputs)) Input_Index = 0;
-      game_input *Next_Input = Inputs + Input_Index;
-      *Next_Input = *Input;
-      for(int Controller_Index = 0; Controller_Index < GAME_CONTROLLER_COUNT; ++Controller_Index)
-      {
-         game_controller *Next = Next_Input->Controllers + Controller_Index;
-         for(int Button_Index = 0; Button_Index < GAME_BUTTON_COUNT; ++Button_Index)
-         {
-            Next->Buttons[Button_Index].Transitioned = false;
-         }
-      }
+      End_Frame_Input(Input, Inputs + Input_Index);
 
       Uint64 Delta = SDL_GetPerformanceCounter() - Sdl.Frame_Start;
       float Actual_Frame_Seconds = (float)Delta / (float)Sdl.Frequency;

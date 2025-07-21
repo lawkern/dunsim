@@ -797,6 +797,17 @@ UPDATE(Update)
    Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
 
    Advance_Text_Line(Font, Text_Size, &Text_Y);
+   Text.Length = snprintf(Data, sizeof(Data), "Mouse: {%0.2f, %0.2f}", Input->Mouse_X, Input->Mouse_Y);
+   Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
+
+   Advance_Text_Line(Font, Text_Size, &Text_Y);
+   Text.Length = snprintf(Data, sizeof(Data), "Mouse Buttons: {%c, %c, %c}",
+                          Is_Held(Input->Mouse_Button_Left)   ? 'd' : 'u',
+                          Is_Held(Input->Mouse_Button_Middle) ? 'd' : 'u',
+                          Is_Held(Input->Mouse_Button_Right)  ? 'd' : 'u');
+   Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
+
+   Advance_Text_Line(Font, Text_Size, &Text_Y);
    Text.Length = snprintf(Data, sizeof(Data), "Camera: {%d, %d, %d}", Camera.X, Camera.Y, Camera.Z);
    Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
 

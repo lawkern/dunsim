@@ -164,6 +164,12 @@ typedef struct {
 typedef struct {
    float Frame_Seconds;
    game_controller Controllers[GAME_CONTROLLER_COUNT];
+
+   float Mouse_X;
+   float Mouse_Y;
+   game_button Mouse_Button_Left;
+   game_button Mouse_Button_Middle;
+   game_button Mouse_Button_Right;
 } game_input;
 
 static inline bool Is_Held(game_button Button)
@@ -185,6 +191,27 @@ static inline bool Was_Released(game_button Button)
    // NOTE: The specified button was released on this frame.
    bool Result = (!Button.Pressed && Button.Transitioned);
    return(Result);
+}
+
+static inline void End_Frame_Input(game_input *Previous, game_input *Next)
+{
+   // NOTE: Copy necessary input state to the game_input structure that will be
+   // used on the next frame. Button down state is carried over, while
+   // transition state is reset.
+
+   *Next = *Previous;
+   for(int Controller_Index = 0; Controller_Index < GAME_CONTROLLER_COUNT; ++Controller_Index)
+   {
+      game_controller *Next_Controller = Next->Controllers + Controller_Index;
+      for(int Button_Index = 0; Button_Index < GAME_BUTTON_COUNT; ++Button_Index)
+      {
+         Next_Controller->Buttons[Button_Index].Transitioned = false;
+      }
+   }
+
+   Next->Mouse_Button_Left.Transitioned = false;
+   Next->Mouse_Button_Middle.Transitioned = false;
+   Next->Mouse_Button_Right.Transitioned = false;
 }
 
 // Game API:
