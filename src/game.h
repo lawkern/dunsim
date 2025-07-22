@@ -214,8 +214,27 @@ static inline void End_Frame_Input(game_input *Previous, game_input *Next)
    Next->Mouse_Button_Right.Transitioned = false;
 }
 
+#define WORK_QUEUE_TASK(Name) void Name(void *Data)
+typedef WORK_QUEUE_TASK(work_queue_task);
+
+typedef struct {
+   void *Data;
+   work_queue_task *Task;
+} work_queue_entry;
+
+typedef struct {
+   volatile u32 Read_Index;
+   volatile u32 Write_Index;
+
+   volatile u32 Completion_Target;
+   volatile u32 Completion_Count;
+
+   void *Semaphore;
+   work_queue_entry Entries[512];
+} work_queue;
+
 // Game API:
-#define UPDATE(Name) void Name(game_memory Memory, game_texture Backbuffer, game_input *Input, float Frame_Seconds)
+#define UPDATE(Name) void Name(game_memory Memory, game_texture Backbuffer, game_input *Input, work_queue *Queue, float Frame_Seconds)
 UPDATE(Update);
 
 // Platform API:
@@ -224,3 +243,9 @@ LOG(Log);
 
 #define READ_ENTIRE_FILE(Name) string Name(arena *Arena, char *Path)
 READ_ENTIRE_FILE(Read_Entire_File);
+
+#define ENQUEUE_WORK(name) void name(work_queue *Queue, void *Data, work_queue_task *Task)
+ENQUEUE_WORK(Enqueue_Work);
+
+#define FLUSH_QUEUE(name) void Name(work_queue *Queue)
+FLUSH_QUEUE(Flush_Queue);

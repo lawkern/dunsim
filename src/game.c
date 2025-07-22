@@ -2,6 +2,7 @@
 
 #include "game.h"
 
+#include "intrinsics.h"
 #include "math.c"
 #include "random.c"
 #include "assets.c"

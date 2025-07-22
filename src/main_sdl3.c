@@ -33,6 +33,76 @@ READ_ENTIRE_FILE(Read_Entire_File)
    return(Result);
 }
 
+ENQUEUE_WORK(Enqueue_Work)
+{
+   u32 New_Write_Index = (Queue->Write_Index + 1) % Array_Count(Queue->Entries);
+   SDL_assert(New_Write_Index != Queue->Read_Index);
+
+   work_queue_entry *Entry = Queue->Entries + Queue->Write_Index;
+   Entry->Data = Data;
+   Entry->Task = Task;
+
+   Queue->Completion_Target++;
+
+   // TODO: Do we need a memory barrier here? Do we need to care about releasing
+   // it with SDL_MemoryBarrierRelease?
+   SDL_MemoryBarrierAcquire();
+
+   Queue->Write_Index = New_Write_Index;
+
+   SDL_Semaphore *Semaphore = (SDL_Semaphore *)&Queue->Semaphore;
+   SDL_SignalSemaphore(Semaphore);
+}
+
+static bool Sdl_Dequeue_Work(work_queue *Queue)
+{
+   // NOTE: Return whether this thread should be made to wait until more work
+   // becomes available.
+
+   u32 Read_Index = Queue->Read_Index;
+   u32 New_Read_Index = (Read_Index + 1) % Array_Count(Queue->Entries);
+   if(Read_Index == Queue->Write_Index)
+   {
+      return(true);
+   }
+
+   u32 Index = Atomic_Compare_Exchange(&Queue->Read_Index, Read_Index, New_Read_Index);
+   if(Index == Read_Index)
+   {
+      work_queue_entry Entry = Queue->Entries[Index];
+      Entry.Task(Entry.Data);
+
+      Atomic_Add(&Queue->Completion_Count, 1);
+   }
+
+   return(false);
+}
+
+FLUSH_QUEUE(Flush_Queue)
+{
+   while(Queue->Completion_Target > Queue->Completion_Count)
+   {
+      Sdl_Dequeue_Work(Queue);
+   }
+
+   Queue->Completion_Target = 0;
+   Queue->Completion_Count = 0;
+}
+
+static int Sdl_Thread_Procedure(void *Parameter)
+{
+   work_queue *Queue = (work_queue *)Parameter;
+   while(1)
+   {
+      if(Sdl_Dequeue_Work(Queue))
+      {
+         SDL_Semaphore *Semaphore = (SDL_Semaphore *)&Queue->Semaphore;
+         SDL_WaitSemaphore(Semaphore);
+      }
+   }
+   return(0);
+}
+
 static struct {
    SDL_Window *Window;
    SDL_Renderer *Renderer;
@@ -174,6 +244,23 @@ int main(void)
 
    int Input_Index = 0;
    game_input Inputs[16] = {0};
+
+   work_queue Queue = {0};
+   Queue.Semaphore = SDL_CreateSemaphore(0);
+
+   int Core_Count = SDL_GetNumLogicalCPUCores();
+   for(int Thread_Index = 1; Thread_Index < Core_Count; ++Thread_Index)
+   {
+      SDL_Thread *Thread = SDL_CreateThread(Sdl_Thread_Procedure, 0, &Queue);
+      if(Thread)
+      {
+         SDL_DetachThread(Thread);
+      }
+      else
+      {
+         SDL_Log("Failed to create worker thread: %s.", SDL_GetError());
+      }
+   }
 
    // Main loop.
    bool Running = true;
@@ -378,7 +465,7 @@ int main(void)
       Input->Mouse_Y = (Raw_Mouse_Y - Dst_Rect.y) / Dst_Rect.h;
 
       // Update game state.
-      Update(Memory, Backbuffer, Input, Sdl.Actual_Frame_Seconds);
+      Update(Memory, Backbuffer, Input, &Queue, Sdl.Actual_Frame_Seconds);
 
       // Render frame.
       SDL_SetRenderDrawColor(Sdl.Renderer, 0, 0, 0, 255);
