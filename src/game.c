@@ -265,16 +265,19 @@ static bool Can_Move(game_state *Game_State, entity *Entity, int Delta_X, int De
 
    // TODO: Handle cross-chunk boundaries.
    map_chunk *Chunk = Query_Map_Chunk(&Game_State->Map, P.X, P.Y, P.Z);
-   for(int Index = 0; Index < Chunk->Entity_Count; ++Index)
+   for(map_chunk_entities *Entities = Chunk->Entities; Entities; Entities = Entities->Next)
    {
-      entity *Test = Game_State->Entities + Chunk->Entity_Indices[Index];
-      if(Test != Entity && Has_Collision(Test))
+      for(int Index = 0; Index < Entities->Index_Count; ++Index)
       {
-         rectangle Test_Rect = To_Rectangle(Test->Position.X, Test->Position.Y, Test->Width, Test->Height);
-         if(Rectangles_Intersect(Entity_Rect, Test_Rect))
+         entity *Test = Game_State->Entities + Entities->Indices[Index];
+         if(Test != Entity && Has_Collision(Test))
          {
-            Result = false;
-            break;
+            rectangle Test_Rect = To_Rectangle(Test->Position.X, Test->Position.Y, Test->Width, Test->Height);
+            if(Rectangles_Intersect(Entity_Rect, Test_Rect))
+            {
+               Result = false;
+               break;
+            }
          }
       }
    }
@@ -379,9 +382,9 @@ static void Advance_Animation(animation *Animation, float Frame_Seconds, float P
 static entity *Create_Entity(game_state *Game_State, entity_type Type, int Width, int Height, int X, int Y, int Z, u32 Flags)
 {
    Assert(Game_State->Entity_Count != Array_Count(Game_State->Entities));
-   int Index = Game_State->Entity_Count++;
+   int Entity_Index = Game_State->Entity_Count++;
 
-   entity *Result = Game_State->Entities + Index;
+   entity *Result = Game_State->Entities + Entity_Index;
    Result->Type = Type;
    Result->Width = Width;
    Result->Height = Height;
@@ -390,9 +393,16 @@ static entity *Create_Entity(game_state *Game_State, entity_type Type, int Width
    Result->Position.Z = Z;
    Result->Flags = Flags;
 
-   map_chunk *Chunk = Insert_Map_Chunk(&Game_State->Map, X, Y, Z);
-   Assert(Chunk->Entity_Count < Array_Count(Chunk->Entity_Indices));
-   Chunk->Entity_Indices[Chunk->Entity_Count++] = Index;
+   map *Map = &Game_State->Map;
+   map_chunk *Chunk = Insert_Map_Chunk(Map, X, Y, Z);
+   map_chunk_entities *Entities = Chunk->Entities;
+   if(!Entities || Entities->Index_Count == Array_Count(Entities->Indices))
+   {
+      map_chunk_entities *New = Allocate(&Map->Arena, map_chunk_entities, 1);
+      New->Next = Entities;
+      Chunk->Entities = Entities = New;
+   }
+   Entities->Indices[Entities->Index_Count++] = Entity_Index;
 
    return(Result);
 }
@@ -415,7 +425,10 @@ UPDATE(Update)
       Arena->Begin = Memory.Base + sizeof(*Game_State);
       Arena->End = Arena->Begin + Megabytes(64);
 
-      Scratch->Begin = Arena->End;
+      Map->Arena.Begin = Arena->End;
+      Map->Arena.End = Map->Arena.Begin + Megabytes(16);
+
+      Scratch->Begin = Map->Arena.End;
       Scratch->End = Memory.Base + Memory.Size;
 
       Assert(Scratch->Begin < Scratch->End);
@@ -682,84 +695,87 @@ UPDATE(Update)
          map_chunk *Chunk = Query_Map_Chunk_By_Chunk(Map, Chunk_X, Chunk_Y, Camera_Position.Z);
          if(Chunk)
          {
-            for(int Index = 0; Index < Chunk->Entity_Count; ++Index)
+            for(map_chunk_entities *Entities = Chunk->Entities; Entities; Entities = Entities->Next)
             {
-               int Entity_Index = Chunk->Entity_Indices[Index];
-
-               entity *Entity = Game_State->Entities + Entity_Index;
-               if(Is_Visible(Entity) && Entity->Position.Z == Camera_Position.Z)
+               for(int Index = 0; Index < Entities->Index_Count; ++Index)
                {
-                  int Pixel_Width  = Entity->Width * Tile_Pixels;
-                  int Pixel_Height = Entity->Height * Tile_Pixels;
+                  int Entity_Index = Entities->Indices[Index];
+
+                  entity *Entity = Game_State->Entities + Entity_Index;
+                  if(Is_Visible(Entity) && Entity->Position.Z == Camera_Position.Z)
+                  {
+                     int Pixel_Width  = Entity->Width * Tile_Pixels;
+                     int Pixel_Height = Entity->Height * Tile_Pixels;
 #if 1
-                  int Offset_X = Tile_Pixels * Entity->Animation.Offset_X;
-                  int Offset_Y = Tile_Pixels * Entity->Animation.Offset_Y;
+                     int Offset_X = Tile_Pixels * Entity->Animation.Offset_X;
+                     int Offset_Y = Tile_Pixels * Entity->Animation.Offset_Y;
 #else
-                  int Offset_X = 0;
-                  int Offset_Y = 0;
+                     int Offset_X = 0;
+                     int Offset_Y = 0;
 #endif
 
-                  int Pixel_X = Tile_Pixels * (Entity->Position.X - Camera_Position.X) + Backbuffer.Width/2 - Offset_X;
-                  int Pixel_Y = Tile_Pixels * (Entity->Position.Y - Camera_Position.Y) + Backbuffer.Height/2 - Offset_Y;
+                     int Pixel_X = Tile_Pixels * (Entity->Position.X - Camera_Position.X) + Backbuffer.Width/2 - Offset_X;
+                     int Pixel_Y = Tile_Pixels * (Entity->Position.Y - Camera_Position.Y) + Backbuffer.Height/2 - Offset_Y;
 
-                  if(Was_Pressed(Input->Mouse_Button_Left))
-                  {
-                     if(Mouse_X_Pixel >= Pixel_X && Mouse_X_Pixel < (Pixel_X + Pixel_Width) &&
-                        Mouse_Y_Pixel >= Pixel_Y && Mouse_Y_Pixel < (Pixel_Y + Pixel_Height))
+                     if(Was_Pressed(Input->Mouse_Button_Left))
                      {
-                        Game_State->Selected_Debug_Entity = (Entity != Game_State->Selected_Debug_Entity) ? Entity : 0;
+                        if(Mouse_X_Pixel >= Pixel_X && Mouse_X_Pixel < (Pixel_X + Pixel_Width) &&
+                           Mouse_Y_Pixel >= Pixel_Y && Mouse_Y_Pixel < (Pixel_Y + Pixel_Height))
+                        {
+                           Game_State->Selected_Debug_Entity = (Entity != Game_State->Selected_Debug_Entity) ? Entity : 0;
+                        }
                      }
-                  }
 
-                  int Nose_Dim = 4 * Border_Pixels;
-                  int Nose_X = Pixel_X + Pixel_Width/2  - Nose_Dim/2;
-                  int Nose_Y = Pixel_Y + Pixel_Height/2 - Nose_Dim/2;
-                  switch(Entity->Animation.Direction)
-                  {
-                     case Direction_Up:    { Nose_Y -= (Pixel_Height/2 - Nose_Dim/2); } break;
-                     case Direction_Down:  { Nose_Y += (Pixel_Height/2 - Nose_Dim/2); } break;
-                     case Direction_Left:  { Nose_X -= (Pixel_Width/2  - Nose_Dim/2); } break;
-                     case Direction_Right: { Nose_X += (Pixel_Width/2  - Nose_Dim/2); } break;
-                     default: {} break;
-                  }
+                     int Nose_Dim = 4 * Border_Pixels;
+                     int Nose_X = Pixel_X + Pixel_Width/2  - Nose_Dim/2;
+                     int Nose_Y = Pixel_Y + Pixel_Height/2 - Nose_Dim/2;
+                     switch(Entity->Animation.Direction)
+                     {
+                        case Direction_Up:    { Nose_Y -= (Pixel_Height/2 - Nose_Dim/2); } break;
+                        case Direction_Down:  { Nose_Y += (Pixel_Height/2 - Nose_Dim/2); } break;
+                        case Direction_Left:  { Nose_X -= (Pixel_Width/2  - Nose_Dim/2); } break;
+                        case Direction_Right: { Nose_X += (Pixel_Width/2  - Nose_Dim/2); } break;
+                        default: {} break;
+                     }
 
-                  switch(Entity->Type)
-                  {
-                     case Entity_Type_Player: {
-                        Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 0x000088FF);
-                        Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 4*Border_Pixels, 0xFFFFFFFF);
+                     switch(Entity->Type)
+                     {
+                        case Entity_Type_Player: {
+                           Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 0x000088FF);
+                           Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 4*Border_Pixels, 0xFFFFFFFF);
 
-                        Draw_Rectangle(Backbuffer, Nose_X, Nose_Y, Nose_Dim, Nose_Dim, 0x0000FFFF);
-                     } break;
+                           Draw_Rectangle(Backbuffer, Nose_X, Nose_Y, Nose_Dim, Nose_Dim, 0x0000FFFF);
+                        } break;
 
-                     case Entity_Type_Dragon: {
-                        Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 0x880000FF);
-                        Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 4*Border_Pixels, 0xFF0000FF);
+                        case Entity_Type_Dragon: {
+                           Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 0x880000FF);
+                           Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 4*Border_Pixels, 0xFF0000FF);
 
-                        Draw_Rectangle(Backbuffer, Nose_X, Nose_Y, Nose_Dim, Nose_Dim, 0xFFFF00FF);
-                     } break;
+                           Draw_Rectangle(Backbuffer, Nose_X, Nose_Y, Nose_Dim, Nose_Dim, 0xFFFF00FF);
+                        } break;
 
-                     case Entity_Type_Wall: {
-                        // int Tile = Get_Map_Position_Value(Map, Entity->Position.X, Entity->Position.Y, Entity->Position.Z);
-                        // if(Tile == 3)
-                        // {
-                        //    game_texture Bitmap = (Entity->Position.Z == 0) ? Game_State->Upstairs : Game_State->Downstairs;
-                        //    Draw_Bitmap(Backbuffer, Bitmap, Pixel_X, Pixel_Y);
-                        // }
-                        // else
-                        // {
+                        case Entity_Type_Wall: {
+                           // int Tile = Get_Map_Position_Value(Map, Entity->Position.X, Entity->Position.Y, Entity->Position.Z);
+                           // if(Tile == 3)
+                           // {
+                           //    game_texture Bitmap = (Entity->Position.Z == 0) ? Game_State->Upstairs : Game_State->Downstairs;
+                           //    Draw_Bitmap(Backbuffer, Bitmap, Pixel_X, Pixel_Y);
+                           // }
+                           // else
+                           // {
                            Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Tile_Pixels, Tile_Pixels, Palette[2]);
                            Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Tile_Pixels, Tile_Pixels, 1, Palette[1]);
-                        // }
-                     } break;
+                           // }
+                        } break;
 
-                     default: {
-                     } break;
-                  }
+                        default: {
+                        } break;
+                     }
 
-                  if(Entity == Game_State->Selected_Debug_Entity)
-                  {
-                     Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 4*Border_Pixels, 0x00FF00FF);
+                     if(Entity == Game_State->Selected_Debug_Entity)
+                     {
+                        Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 4*Border_Pixels, 0x00FF00FF);
+                     }
                   }
                }
             }
@@ -787,9 +803,26 @@ UPDATE(Update)
    Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
 
    Advance_Text_Line(Font, Text_Size, &Text_Y);
+   Text.Length = snprintf(Data, sizeof(Data), "Arena: %zuMB", (Arena->End - Arena->Begin) / (1024 * 1024));
+   Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
+
+   Advance_Text_Line(Font, Text_Size, &Text_Y);
+   Text.Length = snprintf(Data, sizeof(Data), "Map: %zuMB", (Map->Arena.End - Map->Arena.Begin) / (1024 * 1024));
+   Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
+
+   Advance_Text_Line(Font, Text_Size, &Text_Y);
+   Text.Length = snprintf(Data, sizeof(Data), "Scratch: %zuMB", (Scratch->End - Scratch->Begin) / (1024 * 1024));
+   Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
+
+   Advance_Text_Line(Font, Text_Size, &Text_Y);
    Text.Length = snprintf(Data, sizeof(Data), "Mouse: {%0.2f, %0.2f}", Input->Mouse_X, Input->Mouse_Y);
    Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
+
    Advance_Text_Line(Font, Text_Size, &Text_Y);
+
+   Advance_Text_Line(Font, Text_Size, &Text_Y);
+   Text.Length = snprintf(Data, sizeof(Data), "Entity Count: %d", Game_State->Entity_Count);
+   Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
 
    if(Game_State->Selected_Debug_Entity)
    {
