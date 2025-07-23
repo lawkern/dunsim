@@ -50,8 +50,7 @@ ENQUEUE_WORK(Enqueue_Work)
 
    Queue->Write_Index = New_Write_Index;
 
-   SDL_Semaphore *Semaphore = (SDL_Semaphore *)&Queue->Semaphore;
-   SDL_SignalSemaphore(Semaphore);
+   SDL_SignalSemaphore(Queue->Semaphore);
 }
 
 static bool Sdl_Dequeue_Work(work_queue *Queue)
@@ -96,8 +95,7 @@ static int Sdl_Thread_Procedure(void *Parameter)
    {
       if(Sdl_Dequeue_Work(Queue))
       {
-         SDL_Semaphore *Semaphore = (SDL_Semaphore *)&Queue->Semaphore;
-         SDL_WaitSemaphore(Semaphore);
+         SDL_WaitSemaphore(Queue->Semaphore);
       }
    }
    return(0);

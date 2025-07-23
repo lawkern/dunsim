@@ -2,7 +2,7 @@
 
 #include "game.h"
 
-#include "intrinsics.h"
+#include "intrinsics.c"
 #include "math.c"
 #include "random.c"
 #include "assets.c"
@@ -28,29 +28,7 @@ typedef struct {
    int X, Y, Z;
 } position;
 
-typedef enum {
-   Entity_Type_Null,
-   Entity_Type_Floor,
-   Entity_Type_Wall,
-   Entity_Type_Stairs,
-   Entity_Type_Camera,
-   Entity_Type_Player,
-   Entity_Type_Dragon,
-
-   Entity_Type_Count
-} entity_type;
-
-typedef struct {
-   entity_type Type;
-   string Name;
-
-   int Width;
-   int Height;
-   position Position;
-   animation Animation;
-
-   bool Active;
-} entity;
+#include "entity.c"
 
 typedef struct {
    arena Arena;
@@ -67,12 +45,13 @@ typedef struct {
    game_texture Downstairs;
 
    map Map;
-   position Camera;
 
    int Entity_Count;
    entity Entities[1024*1024];
 
    entity *Selected_Debug_Entity;
+   entity *Camera;
+   entity *Players[GAME_CONTROLLER_COUNT];
 } game_state;
 
 static void Clear(game_texture Destination, u32 Color)
@@ -288,9 +267,8 @@ static bool Can_Move(game_state *Game_State, entity *Entity, int Delta_X, int De
    map_chunk *Chunk = Query_Map_Chunk(&Game_State->Map, P.X, P.Y, P.Z);
    for(int Index = 0; Index < Chunk->Entity_Count; ++Index)
    {
-      int Entity_Index = Chunk->Entity_Indices[Index];
-      entity *Test = Game_State->Entities + Entity_Index;
-      if(Test != Entity && Test->Active)
+      entity *Test = Game_State->Entities + Chunk->Entity_Indices[Index];
+      if(Test != Entity && Has_Collision(Test))
       {
          rectangle Test_Rect = To_Rectangle(Test->Position.X, Test->Position.Y, Test->Width, Test->Height);
          if(Rectangles_Intersect(Entity_Rect, Test_Rect))
@@ -301,6 +279,12 @@ static bool Can_Move(game_state *Game_State, entity *Entity, int Delta_X, int De
       }
    }
 
+   return(Result);
+}
+
+static bool Is_Animating(animation *Animation)
+{
+   bool Result = (Animation->Offset_X != 0.0f || Animation->Offset_Y != 0.0f);
    return(Result);
 }
 
@@ -392,19 +376,19 @@ static void Advance_Animation(animation *Animation, float Frame_Seconds, float P
    }
 }
 
-static entity *Create_Entity(game_state *Game_State, entity_type Type, string Name, int Width, int Height, int X, int Y, int Z)
+static entity *Create_Entity(game_state *Game_State, entity_type Type, int Width, int Height, int X, int Y, int Z, u32 Flags)
 {
    Assert(Game_State->Entity_Count != Array_Count(Game_State->Entities));
    int Index = Game_State->Entity_Count++;
 
    entity *Result = Game_State->Entities + Index;
    Result->Type = Type;
-   Result->Name = Name;
    Result->Width = Width;
    Result->Height = Height;
    Result->Position.X = X;
    Result->Position.Y = Y;
    Result->Position.Z = Z;
+   Result->Flags = Flags;
 
    map_chunk *Chunk = Insert_Map_Chunk(&Game_State->Map, X, Y, Z);
    Assert(Chunk->Entity_Count < Array_Count(Chunk->Entity_Indices));
@@ -438,20 +422,17 @@ UPDATE(Update)
 
       Game_State->Entropy = Random_Seed(0x13);
 
-      Game_State->Camera.X = 8;
-      Game_State->Camera.Y = 8;
-
+      position Origin = {8, 8, 0};
       Game_State->Entity_Count++; // Skip null entity.
       for(int Player_Index = 0; Player_Index < GAME_CONTROLLER_COUNT; ++Player_Index)
       {
-         Create_Entity(Game_State, Entity_Type_Player, S("Player"), 2, 2,
-                       Game_State->Camera.X,
-                       Game_State->Camera.Y,
-                       Game_State->Camera.Z);
+         u32 Flags = Entity_Flag_Visible|Entity_Flag_Collides;
+         Game_State->Players[Player_Index] = Create_Entity(Game_State, Entity_Type_Player, 2, 2, Origin.X, Origin.Y, Origin.Z, Flags);
       }
+      Game_State->Camera = Create_Entity(Game_State, Entity_Type_Camera, 0, 0, Origin.X, Origin.Y, Origin.Z, Entity_Flag_Active);
 
-      entity *Dragon = Create_Entity(Game_State, Entity_Type_Dragon, S("Dragon"), 4, 4, 6, -8, 0);
-      Dragon->Active = true;
+      u32 Dragon_Flags = Entity_Flag_Active|Entity_Flag_Visible|Entity_Flag_Collides;
+      Create_Entity(Game_State, Entity_Type_Dragon, 4, 4, 6, -8, Origin.Z, Dragon_Flags);
 
       int Chunk_X = 0;
       int Chunk_Y = 0;
@@ -468,10 +449,17 @@ UPDATE(Update)
          {
             for(int Offset_X = 0; Offset_X < MAP_CHUNK_DIM; ++Offset_X)
             {
-               if(Debug_Map_Chunk[Offset_Y][Offset_X] == 2)
+               switch(Debug_Map_Chunk[Offset_Y][Offset_X])
                {
-                  entity *Wall = Create_Entity(Game_State, Entity_Type_Wall, S("Wall"), 1, 1, X+Offset_X, Y+Offset_Y, Z);
-                  Wall->Active = true;
+                  case 1: { // Floor
+                     u32 Flags = Entity_Flag_Active|Entity_Flag_Visible;
+                     Create_Entity(Game_State, Entity_Type_Floor, 1, 1, X+Offset_X, Y+Offset_Y, Z, Flags);
+                  } break;
+
+                  case 2: { // Wall
+                     u32 Flags = Entity_Flag_Active|Entity_Flag_Visible|Entity_Flag_Collides;
+                     Create_Entity(Game_State, Entity_Type_Wall, 1, 1, X+Offset_X, Y+Offset_Y, Z, Flags);
+                  } break;
                }
             }
          }
@@ -553,15 +541,19 @@ UPDATE(Update)
          );
    }
 
+   int Player_Delta_Xs[GAME_CONTROLLER_COUNT] = {0};
+   int Player_Delta_Ys[GAME_CONTROLLER_COUNT] = {0};
+   int Camera_Delta_X = 0;
+   int Camera_Delta_Y = 0;
+
    // General Input Handling.
    for(int Controller_Index = 0; Controller_Index < GAME_CONTROLLER_COUNT; ++Controller_Index)
    {
       game_controller *Controller = Input->Controllers + Controller_Index;
       if(Controller->Connected)
       {
-         entity *Player = Game_State->Entities + Controller_Index + 1;
-         Player->Active = Controller->Connected;
-
+         entity *Player = Game_State->Players[Controller_Index];
+         Controller->Connected ? Activate_Entity(Player) : Deactivate_Entity(Player);
 
          if(Was_Pressed(Controller->Action_Up))
          {
@@ -575,24 +567,28 @@ UPDATE(Update)
          bool Moving_Camera = Is_Held(Controller->Shoulder_Right);
          if(Moving_Camera)
          {
-            int Camera_Delta = 4;
-            if(Is_Held(Controller->Shoulder_Right))
-            {
-               if(Was_Pressed(Controller->Move_Up))    Game_State->Camera.Y -= Camera_Delta;
-               if(Was_Pressed(Controller->Move_Down))  Game_State->Camera.Y += Camera_Delta;
-               if(Was_Pressed(Controller->Move_Left))  Game_State->Camera.X -= Camera_Delta;
-               if(Was_Pressed(Controller->Move_Right)) Game_State->Camera.X += Camera_Delta;
-            }
+            int Delta = 4;
+            if(Was_Pressed(Controller->Move_Up))    Camera_Delta_Y -= Delta;
+            if(Was_Pressed(Controller->Move_Down))  Camera_Delta_Y += Delta;
+            if(Was_Pressed(Controller->Move_Left))  Camera_Delta_X -= Delta;
+            if(Was_Pressed(Controller->Move_Right)) Camera_Delta_X += Delta;
+         }
+         else
+         {
+            int Delta = (Is_Held(Controller->Action_Down)) ? 2 : 1;
+            if(Is_Held(Controller->Move_Up))    Player_Delta_Ys[Controller_Index] -= Delta;
+            if(Is_Held(Controller->Move_Down))  Player_Delta_Ys[Controller_Index] += Delta;
+            if(Is_Held(Controller->Move_Left))  Player_Delta_Xs[Controller_Index] -= Delta;
+            if(Is_Held(Controller->Move_Right)) Player_Delta_Xs[Controller_Index] += Delta;
          }
 
          int Camera_Stick_Delta = 2;
-         Game_State->Camera.X += (Camera_Stick_Delta * Controller->Stick_Right_X);
-         Game_State->Camera.Y += (Camera_Stick_Delta * Controller->Stick_Right_Y);
+         Camera_Delta_X += (Camera_Stick_Delta * Controller->Stick_Right_X);
+         Camera_Delta_Y += (Camera_Stick_Delta * Controller->Stick_Right_Y);
 
          if(Was_Pressed(Controller->Start))
          {
-            Game_State->Camera.X = Player->Position.X;
-            Game_State->Camera.Y = Player->Position.Y;
+            // Camera->Position = Player->Position;
          }
       }
    }
@@ -601,40 +597,35 @@ UPDATE(Update)
    for(int Entity_Index = 0; Entity_Index < Game_State->Entity_Count; ++Entity_Index)
    {
       entity *Entity = Game_State->Entities + Entity_Index;
-      if(Entity->Active)
+      if(Is_Active(Entity))
       {
          switch(Entity->Type)
          {
             case Entity_Type_Player: {
-               if(Entity->Animation.Offset_X == 0.0f && Entity->Animation.Offset_Y == 0.0f)
+               if(!Is_Animating(&Entity->Animation))
                {
-                  game_controller *Controller = Input->Controllers + Entity_Index - 1;
-                  bool Dash = Is_Held(Controller->Action_Down);
-                  int Delta = (Dash) ? 2 : 1;
+                  int Player_Index = Entity - Game_State->Players[0];
+                  int Delta_X = Player_Delta_Xs[Player_Index];
+                  int Delta_Y = Player_Delta_Ys[Player_Index];
 
-                  bool Up    = Is_Held(Controller->Move_Up);
-                  bool Down  = Is_Held(Controller->Move_Down);
-                  bool Left  = Is_Held(Controller->Move_Left);
-                  bool Right = Is_Held(Controller->Move_Right);
-
-                  int Delta_X = 0;
-                  int Delta_Y = 0;
-
-                  if(Up)    Delta_Y -= Delta;
-                  if(Down)  Delta_Y += Delta;
-                  if(Left)  Delta_X -= Delta;
-                  if(Right) Delta_X += Delta;
-
-                  if((Delta_X || Delta_Y) && Move(Game_State, Entity, Delta_X, Delta_Y))
+                  if(Delta_X || Delta_Y)
                   {
-                     Game_State->Camera.Z = Entity->Position.Z;
+                     if(Move(Game_State, Entity, Delta_X, Delta_Y))
+                     {
+                        Game_State->Camera->Position.Z = Entity->Position.Z;
+                     }
                   }
                }
                Advance_Animation(&Entity->Animation, Frame_Seconds, 10.0f);
             } break;
 
+            case Entity_Type_Camera: {
+               Entity->Position.X += Camera_Delta_X;
+               Entity->Position.Y += Camera_Delta_Y;
+            } break;
+
             case Entity_Type_Dragon: {
-               if(Entity->Animation.Offset_X == 0.0f && Entity->Animation.Offset_Y == 0.0f)
+               if(!Is_Animating(&Entity->Animation))
                {
                   int Delta_X = 0;
                   int Delta_Y = 0;
@@ -660,49 +651,26 @@ UPDATE(Update)
       }
    }
 
-   position Camera = Game_State->Camera;
+   position Camera_Position = Game_State->Camera->Position;
 
    // Rendering
    u32 Palettes[2][4] = {
       {0x000088FF, 0x0000CCFF, 0x0000FFFF, 0x008800FF},
       {0x008800FF, 0x00CC00FF, 0x00FF00FF, 0x000088FF},
    };
-   u32 *Palette = Palettes[Camera.Z];
+   u32 *Palette = Palettes[Camera_Position.Z];
 
    Clear(Backbuffer, Palette[0]);
 
    // TODO: Loop over the surrounding chunks instead of tiles so that we don't
    // have to query for the chunk on each iteration.
-   int Min_X = Camera.X - MAP_CHUNK_DIM*2;
-   int Max_X = Camera.X + MAP_CHUNK_DIM*2;
+   int Min_X = Camera_Position.X - MAP_CHUNK_DIM*2;
+   int Max_X = Camera_Position.X + MAP_CHUNK_DIM*2;
 
-   int Min_Y = Camera.Y - MAP_CHUNK_DIM*2;
-   int Max_Y = Camera.Y + MAP_CHUNK_DIM*2;
+   int Min_Y = Camera_Position.Y - MAP_CHUNK_DIM*2;
+   int Max_Y = Camera_Position.Y + MAP_CHUNK_DIM*2;
 
    int Border_Pixels = Maximum(1, Tile_Pixels / 16);
-
-#if 0
-   for(int Y = Min_Y; Y < Max_Y; ++Y)
-   {
-      for(int X = Min_X; X < Max_X; ++X)
-      {
-         int Tile = Get_Map_Position_Value(Map, X, Y, Camera.Z);
-         int Pixel_X = Tile_Pixels*(X - Camera.X) + Backbuffer.Width/2;
-         int Pixel_Y = Tile_Pixels*(Y - Camera.Y) + Backbuffer.Height/2;
-
-         if(Tile == 3)
-         {
-            game_texture Bitmap = (Camera.Z == 0) ? Game_State->Upstairs : Game_State->Downstairs;
-            Draw_Bitmap(Backbuffer, Bitmap, Pixel_X, Pixel_Y);
-         }
-         else
-         {
-            Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Tile_Pixels, Tile_Pixels, Palette[Tile]);
-            Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Tile_Pixels, Tile_Pixels, 1, Palette[1]);
-         }
-      }
-   }
-#endif
 
    int Mouse_X_Pixel = Input->Mouse_X * (float)Backbuffer.Width;
    int Mouse_Y_Pixel = Input->Mouse_Y * (float)Backbuffer.Height;
@@ -711,7 +679,7 @@ UPDATE(Update)
    {
       for(int Chunk_X = -1; Chunk_X <= 1; ++Chunk_X)
       {
-         map_chunk *Chunk = Query_Map_Chunk_By_Chunk(Map, Chunk_X, Chunk_Y, Camera.Z);
+         map_chunk *Chunk = Query_Map_Chunk_By_Chunk(Map, Chunk_X, Chunk_Y, Camera_Position.Z);
          if(Chunk)
          {
             for(int Index = 0; Index < Chunk->Entity_Count; ++Index)
@@ -719,7 +687,7 @@ UPDATE(Update)
                int Entity_Index = Chunk->Entity_Indices[Index];
 
                entity *Entity = Game_State->Entities + Entity_Index;
-               if(Entity->Active && Entity->Position.Z == Camera.Z)
+               if(Is_Visible(Entity) && Entity->Position.Z == Camera_Position.Z)
                {
                   int Pixel_Width  = Entity->Width * Tile_Pixels;
                   int Pixel_Height = Entity->Height * Tile_Pixels;
@@ -731,8 +699,8 @@ UPDATE(Update)
                   int Offset_Y = 0;
 #endif
 
-                  int Pixel_X = Tile_Pixels * (Entity->Position.X - Camera.X) + Backbuffer.Width/2 - Offset_X;
-                  int Pixel_Y = Tile_Pixels * (Entity->Position.Y - Camera.Y) + Backbuffer.Height/2 - Offset_Y;
+                  int Pixel_X = Tile_Pixels * (Entity->Position.X - Camera_Position.X) + Backbuffer.Width/2 - Offset_X;
+                  int Pixel_Y = Tile_Pixels * (Entity->Position.Y - Camera_Position.Y) + Backbuffer.Height/2 - Offset_Y;
 
                   if(Was_Pressed(Input->Mouse_Button_Left))
                   {
@@ -821,17 +789,14 @@ UPDATE(Update)
    Advance_Text_Line(Font, Text_Size, &Text_Y);
    Text.Length = snprintf(Data, sizeof(Data), "Mouse: {%0.2f, %0.2f}", Input->Mouse_X, Input->Mouse_Y);
    Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
-
    Advance_Text_Line(Font, Text_Size, &Text_Y);
-   Text.Length = snprintf(Data, sizeof(Data), "Camera: {%d, %d, %d}", Camera.X, Camera.Y, Camera.Z);
-   Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
 
    if(Game_State->Selected_Debug_Entity)
    {
       Advance_Text_Line(Font, Text_Size, &Text_Y);
+      string Name = Entity_Type_Names[Game_State->Selected_Debug_Entity->Type];
       Text.Length = snprintf(Data, sizeof(Data), "%.*s: {X:%d, Y:%d, Z:%d, W:%d, H:%d} (SELECTED)",
-                             (int)Game_State->Selected_Debug_Entity->Name.Length,
-                             Game_State->Selected_Debug_Entity->Name.Data,
+                             (int)Name.Length, Name.Data,
                              Game_State->Selected_Debug_Entity->Position.X,
                              Game_State->Selected_Debug_Entity->Position.Y,
                              Game_State->Selected_Debug_Entity->Position.Z,
@@ -841,11 +806,10 @@ UPDATE(Update)
       Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
    }
 
-#if 0
    for(int Entity_Index = 0; Entity_Index < Game_State->Entity_Count; ++Entity_Index)
    {
       entity *Entity = Game_State->Entities + Entity_Index;
-      if(Entity->Active)
+      if(Is_Active(Entity))
       {
          switch(Entity->Type)
          {
@@ -854,9 +818,9 @@ UPDATE(Update)
             case Entity_Type_Dragon:
             {
                Advance_Text_Line(Font, Text_Size, &Text_Y);
+               string Name = Entity_Type_Names[Entity->Type];
                Text.Length = snprintf(Data, sizeof(Data), "%.*s: {%d, %d, %d}",
-                                      (int)Entity->Name.Length,
-                                      Entity->Name.Data,
+                                      (int)Name.Length, Name.Data,
                                       Entity->Position.X,
                                       Entity->Position.Y,
                                       Entity->Position.Z);
@@ -868,7 +832,6 @@ UPDATE(Update)
          }
       }
    }
-#endif
 
    if(Game_State->Active_Textbox_Index)
    {

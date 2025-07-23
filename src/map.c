@@ -5,7 +5,7 @@ typedef struct {
    // int Positions[MAP_CHUNK_DIM][MAP_CHUNK_DIM];
 
    int Entity_Count;
-   int Entity_Indices[256];
+   int Entity_Indices[256 * 2];
 } map_chunk;
 
 typedef struct {
