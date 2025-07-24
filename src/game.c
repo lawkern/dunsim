@@ -184,6 +184,43 @@ static void Draw_Text(game_texture Destination, text_font *Font, text_size Size,
    }
 }
 
+typedef struct {
+   game_texture Destination;
+   int X;
+   int Y;
+
+   text_font *Font;
+   text_size Size;
+} text_context;
+
+static text_context Begin_Text(game_texture Destination, int X, int Y, text_font *Font, text_size Size)
+{
+   text_context Result = {0};
+   Result.Destination = Destination;
+   Result.X = X;
+   Result.Y = Y;
+   Result.Font = Font;
+   Result.Size = Size;
+
+   return(Result);
+}
+
+static void Text_Line(text_context *Text, char *Format, ...)
+{
+   Advance_Text_Line(Text->Font, Text->Size, &Text->Y);
+
+   char Data[128];
+   string String = {0};
+   String.Data = (u8 *)Data;
+
+   va_list Arguments;
+   va_start(Arguments, Format);
+   String.Length = vsnprintf(Data, sizeof(Data), Format, Arguments);
+   va_end(Arguments);
+
+   Draw_Text(Text->Destination, Text->Font, Text->Size, Text->X, Text->Y, String);
+}
+
 static void Draw_Textbox(game_state *Game_State, game_texture Destination, string Text)
 {
    text_font *Font = &Game_State->Varia_Font;
@@ -784,59 +821,30 @@ UPDATE(Update)
    }
 
    // User Interface.
-   int Text_X = Tile_Pixels/2;
-   int Text_Y = 0;
-   text_size Text_Size = Text_Size_Large;
-   text_font *Font = &Game_State->Varia_Font;
+   text_context Text = Begin_Text(Backbuffer, Tile_Pixels/2, 0, &Game_State->Varia_Font, Text_Size_Large);
+   Text_Line(&Text, "Dungeon Simulator");
 
-   Advance_Text_Line(Font, Text_Size, &Text_Y);
-   Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, S("Dungeon Simulator"));
+   Text.Font = &Game_State->Fixed_Font;
+   Text.Size = Text_Size_Medium;
+   Text_Line(&Text, "Frame Time: %3.3fms", Frame_Seconds*1000.0f);
+   Text_Line(&Text, "Arena: %zuMB", (Arena->End - Arena->Begin) / (1024 * 1024));
+   Text_Line(&Text, "Map: %zuMB", (Map->Arena.End - Map->Arena.Begin) / (1024 * 1024));
+   Text_Line(&Text, "Scratch: %zuMB", (Scratch->End - Scratch->Begin) / (1024 * 1024));
+   Text_Line(&Text, "Mouse: {%0.2f, %0.2f}", Input->Mouse_X, Input->Mouse_Y);
+   Text_Line(&Text, "");
 
-   char Data[128];
-   string Text = {0};
-   Text.Data = (u8 *)Data;
-   Text_Size = Text_Size_Medium;
-   Font = &Game_State->Fixed_Font;
-
-   Advance_Text_Line(Font, Text_Size, &Text_Y);
-   Text.Length = snprintf(Data, sizeof(Data), "Frame Time: %3.3fms", Frame_Seconds*1000.0f);
-   Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
-
-   Advance_Text_Line(Font, Text_Size, &Text_Y);
-   Text.Length = snprintf(Data, sizeof(Data), "Arena: %zuMB", (Arena->End - Arena->Begin) / (1024 * 1024));
-   Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
-
-   Advance_Text_Line(Font, Text_Size, &Text_Y);
-   Text.Length = snprintf(Data, sizeof(Data), "Map: %zuMB", (Map->Arena.End - Map->Arena.Begin) / (1024 * 1024));
-   Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
-
-   Advance_Text_Line(Font, Text_Size, &Text_Y);
-   Text.Length = snprintf(Data, sizeof(Data), "Scratch: %zuMB", (Scratch->End - Scratch->Begin) / (1024 * 1024));
-   Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
-
-   Advance_Text_Line(Font, Text_Size, &Text_Y);
-   Text.Length = snprintf(Data, sizeof(Data), "Mouse: {%0.2f, %0.2f}", Input->Mouse_X, Input->Mouse_Y);
-   Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
-
-   Advance_Text_Line(Font, Text_Size, &Text_Y);
-
-   Advance_Text_Line(Font, Text_Size, &Text_Y);
-   Text.Length = snprintf(Data, sizeof(Data), "Entity Count: %d", Game_State->Entity_Count);
-   Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
-
+   Text_Line(&Text, "Entity Count: %d", Game_State->Entity_Count);
    if(Game_State->Selected_Debug_Entity)
    {
-      Advance_Text_Line(Font, Text_Size, &Text_Y);
-      string Name = Entity_Type_Names[Game_State->Selected_Debug_Entity->Type];
-      Text.Length = snprintf(Data, sizeof(Data), "%.*s: {X:%d, Y:%d, Z:%d, W:%d, H:%d} (SELECTED)",
+      entity *Selected = Game_State->Selected_Debug_Entity;
+      string Name = Entity_Type_Names[Selected->Type];
+      Text_Line(&Text, "%.*s (SELECTED): {X:%d, Y:%d, Z:%d, W:%d, H:%d}",
                              (int)Name.Length, Name.Data,
-                             Game_State->Selected_Debug_Entity->Position.X,
-                             Game_State->Selected_Debug_Entity->Position.Y,
-                             Game_State->Selected_Debug_Entity->Position.Z,
-                             Game_State->Selected_Debug_Entity->Width,
-                             Game_State->Selected_Debug_Entity->Height);
-
-      Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
+                             Selected->Position.X,
+                             Selected->Position.Y,
+                             Selected->Position.Z,
+                             Selected->Width,
+                             Selected->Height);
    }
 
    for(int Entity_Index = 0; Entity_Index < Game_State->Entity_Count; ++Entity_Index)
@@ -850,15 +858,9 @@ UPDATE(Update)
             case Entity_Type_Player:
             case Entity_Type_Dragon:
             {
-               Advance_Text_Line(Font, Text_Size, &Text_Y);
                string Name = Entity_Type_Names[Entity->Type];
-               Text.Length = snprintf(Data, sizeof(Data), "%.*s: {%d, %d, %d}",
-                                      (int)Name.Length, Name.Data,
-                                      Entity->Position.X,
-                                      Entity->Position.Y,
-                                      Entity->Position.Z);
-
-               Draw_Text(Backbuffer, Font, Text_Size, Text_X, Text_Y, Text);
+               Text_Line(&Text, "%.*s: {%d, %d, %d}", (int)Name.Length, Name.Data,
+                         Entity->Position.X, Entity->Position.Y, Entity->Position.Z);
             } break;
 
             default: {} break;
