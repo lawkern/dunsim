@@ -221,6 +221,11 @@ static inline void End_Frame_Input(game_input *Previous, game_input *Next)
 #define GAME_AUDIO_CHANNEL_COUNT 2
 #define GAME_AUDIO_FREQUENCY 48000
 
+typedef struct {
+   int Sample_Count;
+   s16 *Samples[GAME_AUDIO_CHANNEL_COUNT];
+} game_sound;
+
 #define WORK_QUEUE_TASK(Name) void Name(void *Data)
 typedef WORK_QUEUE_TASK(work_queue_task);
 

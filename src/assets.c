@@ -125,3 +125,103 @@ static game_texture Load_Image(arena *Arena, char *Path)
 
    return(Result);
 }
+
+#pragma pack(push, 1)
+typedef struct {
+   u32 Chunk_ID;
+   u32 Chunk_Size;
+} wave_header;
+
+typedef struct {
+   wave_header Header;
+   u32 Wave_ID;
+} wave_riff_chunk;
+
+typedef struct {
+   wave_header Header;
+   u16 Format;
+   u16 Channel_Count;
+   u32 Samples_Per_Second;
+   u32 Average_Bytes_Per_Second;
+   u16 Block_Align;
+   u16 Bits_Per_Sample;
+   u16 Extension_Size;
+   u16 Valid_Bits_Per_Sample;
+} wave_format_chunk;
+
+typedef struct {
+   wave_header Header;
+   s16 Data[];
+} wave_data_chunk;
+#pragma pack(pop)
+
+#define WAVE_FORMAT_PCM 0x0001
+
+static game_sound Load_Wave(arena *Arena, arena Scratch, char *Path)
+{
+   game_sound Result = {0};
+
+   string File = Read_Entire_File(&Scratch, Path);
+   Assert(File.Length);
+
+   u8 *At = File.Data;
+   u8 *End = File.Data + File.Length;
+
+   while(At < End)
+   {
+      wave_header *Header = (wave_header *)At;
+      switch(Header->Chunk_ID)
+      {
+         // TODO: I don't think multi-character literals are supported on
+         // MSVC. Maybe we'll care about that some day.
+
+         case 'FFIR': { // RIFF
+            wave_riff_chunk *Chunk = (wave_riff_chunk *)At;
+            assert(Chunk->Wave_ID == 'EVAW'); // WAVE
+
+            At += sizeof(*Chunk);
+         } break;
+
+         case ' tmf': { // fmt
+            wave_format_chunk *Chunk = (wave_format_chunk *)At;
+
+            Assert(Chunk->Format == WAVE_FORMAT_PCM);
+            Assert(Chunk->Samples_Per_Second == GAME_AUDIO_FREQUENCY);
+            Assert(Chunk->Channel_Count == GAME_AUDIO_CHANNEL_COUNT);
+
+            At += sizeof(*Header) + Header->Chunk_Size;
+         } break;
+
+         case 'atad': { // data
+            wave_data_chunk *Chunk = (wave_data_chunk *)At;
+            Header->Chunk_Size = (Header->Chunk_Size + 1) & ~1;
+
+            Result.Sample_Count = Header->Chunk_Size / (GAME_AUDIO_CHANNEL_COUNT * sizeof(s16));
+
+            s16 *Source = Chunk->Data;
+            s16 *Destination = Allocate(Arena, s16, Result.Sample_Count*GAME_AUDIO_CHANNEL_COUNT);
+
+            for(int Channel_Index = 0; Channel_Index < GAME_AUDIO_CHANNEL_COUNT; ++Channel_Index)
+            {
+               Result.Samples[Channel_Index] = Destination + Channel_Index*Result.Sample_Count;
+            }
+
+            for(int Sample_Index = 0; Sample_Index < Result.Sample_Count; ++Sample_Index)
+            {
+               for(int Channel_Index = 0; Channel_Index < GAME_AUDIO_CHANNEL_COUNT; ++Channel_Index)
+               {
+                  Result.Samples[Channel_Index][Sample_Index] = *Source++;
+               }
+            }
+
+            At += sizeof(*Header) + Header->Chunk_Size;
+         } break;
+
+         default: {
+            Assert(0);
+         } break;
+      }
+   }
+
+   return(Result);
+}

@@ -43,6 +43,7 @@ typedef struct {
 
    game_texture Upstairs;
    game_texture Downstairs;
+   game_sound Background_Music;
 
    map Map;
 
@@ -561,6 +562,8 @@ UPDATE(Update)
 
       Game_State->Upstairs = Load_Image(Arena, "data/upstairs.png");
       Game_State->Downstairs = Load_Image(Arena, "data/downstairs.png");
+
+      Game_State->Background_Music = Load_Wave(Arena, *Scratch, "data/bgm.wav");
 
       Game_State->Textbox_Dialogue[1] = S(
          "THE FIRST WORLD\n"
