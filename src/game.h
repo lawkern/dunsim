@@ -1,6 +1,10 @@
 /* (c) copyright 2025 Lawrence D. Kern /////////////////////////////////////// */
 
 #include <stdint.h>
+typedef int8_t s8;
+typedef int16_t s16;
+typedef int32_t s32;
+typedef int64_t s64;
 typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
@@ -213,6 +217,9 @@ static inline void End_Frame_Input(game_input *Previous, game_input *Next)
    Next->Mouse_Button_Middle.Transitioned = false;
    Next->Mouse_Button_Right.Transitioned = false;
 }
+
+#define GAME_AUDIO_CHANNEL_COUNT 2
+#define GAME_AUDIO_FREQUENCY 48000
 
 #define WORK_QUEUE_TASK(Name) void Name(void *Data)
 typedef WORK_QUEUE_TASK(work_queue_task);

@@ -114,6 +114,8 @@ static struct {
    float Monitor_Refresh_Rate;
    float Target_Frame_Seconds;
    float Actual_Frame_Seconds;
+
+   SDL_AudioStream *Audio_Stream;
 } Sdl;
 
 static void Sdl_Process_Button(game_button *Button, bool Pressed)
@@ -184,7 +186,7 @@ int main(void)
    int Window_Width = 640;
    int Window_Height = 480;
 
-   if(!SDL_Init(SDL_INIT_VIDEO|SDL_INIT_GAMEPAD))
+   if(!SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO|SDL_INIT_GAMEPAD))
    {
       SDL_Log("Failed to initialize SDL3: %s", SDL_GetError());
       SDL_assert(0);
@@ -227,6 +229,23 @@ int main(void)
 
    SDL_Log("Monitor refresh rate: %02f", Sdl.Monitor_Refresh_Rate);
    SDL_Log("Target frame time: %0.03fms", Sdl.Target_Frame_Seconds * 1000.0f);
+
+   SDL_AudioSpec Audio_Spec = {0};
+   Audio_Spec.format = SDL_AUDIO_S16;
+   Audio_Spec.channels = GAME_AUDIO_CHANNEL_COUNT;
+   Audio_Spec.freq = GAME_AUDIO_FREQUENCY;
+
+   Sdl.Audio_Stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &Audio_Spec, 0, 0);
+   if(!Sdl.Audio_Stream)
+   {
+      SDL_Log("Failed to open audio stream: %s", SDL_GetError());
+      SDL_assert(0);
+   }
+   SDL_ResumeAudioStreamDevice(Sdl.Audio_Stream);
+
+#define AUDIO_FRAME_BUFFER_SAMPLE_COUNT 1024
+   size Audio_Samples_Size = sizeof(s16) * AUDIO_FRAME_BUFFER_SAMPLE_COUNT * GAME_AUDIO_CHANNEL_COUNT;
+   s16 *Audio_Samples = SDL_calloc(1, Audio_Samples_Size);
 
    // Initialize game.
    game_memory Memory = {0};
@@ -463,7 +482,36 @@ int main(void)
       Input->Mouse_Y = (Raw_Mouse_Y - Dst_Rect.y) / Dst_Rect.h;
 
       // Update game state.
-      Update(Memory, Backbuffer, Input, &Queue, Sdl.Actual_Frame_Seconds);
+      Update(Memory, Backbuffer, Input ,&Queue, Sdl.Actual_Frame_Seconds);
+
+      // Fill audio.
+      static int Running_Sample_Index = 0;
+      int Minimum_Audio_Size = GAME_AUDIO_FREQUENCY * sizeof(s16);
+      int Bytes_Queued = SDL_GetAudioStreamQueued(Sdl.Audio_Stream);
+      if(Bytes_Queued < 0)
+      {
+         SDL_Log("Failed to query audio queue size: %s", SDL_GetError());
+      }
+      else if(Bytes_Queued < Minimum_Audio_Size)
+      {
+         for(int Sample_Index = 0; Sample_Index < AUDIO_FRAME_BUFFER_SAMPLE_COUNT; ++Sample_Index)
+         {
+            float Phase = 256.0f * (float)Running_Sample_Index / (float)GAME_AUDIO_FREQUENCY;
+            float Volume = 1000.0f;
+            s16 Sample = (s16)(Volume * Sine(Phase));
+            for(int Channel_Index = 0; Channel_Index < GAME_AUDIO_CHANNEL_COUNT; ++Channel_Index)
+            {
+               Audio_Samples[GAME_AUDIO_CHANNEL_COUNT*Sample_Index + Channel_Index] = Sample;
+            }
+            Running_Sample_Index++;
+            Running_Sample_Index %= GAME_AUDIO_FREQUENCY;
+         }
+
+         if(!SDL_PutAudioStreamData(Sdl.Audio_Stream, Audio_Samples, Audio_Samples_Size))
+         {
+            SDL_Log("Failed to fill audio stream: %s", SDL_GetError());
+         }
+      }
 
       // Render frame.
       SDL_SetRenderDrawColor(Sdl.Renderer, 0, 0, 0, 255);

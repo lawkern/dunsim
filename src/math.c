@@ -2,6 +2,15 @@
 
 #include <math.h>
 
+#define TAU32 6.28318530718f
+
+static float Sine(float Turns)
+{
+   float Radians = Turns * TAU32;
+   float Result = sinf(Radians);
+   return(Result);
+}
+
 static float Floor(float Value)
 {
    float Result = floorf(Value);
