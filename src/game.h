@@ -254,7 +254,7 @@ typedef struct {
 #define UPDATE(Name) void Name(game_memory Memory, game_texture Backbuffer, game_input *Input, work_queue *Queue, float Frame_Seconds)
 UPDATE(Update);
 
-#define MIX_SOUND(Name) void Name(game_memory Memory, game_audio_output *Audio)
+#define MIX_SOUND(Name) void Name(game_memory Memory, game_audio_output *Audio_Output)
 MIX_SOUND(Mix_Sound);
 
 // Platform API:

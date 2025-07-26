@@ -30,6 +30,21 @@ typedef struct {
 
 #include "entity.c"
 
+typedef enum {
+   Audio_Playback_Once,
+   Audio_Playback_Loop,
+} audio_playback;
+
+typedef struct audio_track audio_track;
+struct audio_track
+{
+   game_sound *Sound;
+   audio_track *Next;
+
+   int Sample_Index;
+   audio_playback Playback;
+};
+
 typedef struct {
    arena Arena;
    arena Scratch;
@@ -44,8 +59,8 @@ typedef struct {
    game_texture Upstairs;
    game_texture Downstairs;
 
-   int Running_Sample_Index;
    game_sound Background_Music;
+   game_sound Clap;
 
    map Map;
 
@@ -55,6 +70,9 @@ typedef struct {
    entity *Selected_Debug_Entity;
    entity *Camera;
    entity *Players[GAME_CONTROLLER_COUNT];
+
+   audio_track *Audio_Tracks;
+   audio_track *Free_Audio_Tracks;
 } game_state;
 
 static void Clear(game_texture Destination, u32 Color)
@@ -447,6 +465,27 @@ static entity *Create_Entity(game_state *Game_State, entity_type Type, int Width
    return(Result);
 }
 
+static void Play_Sound(game_state *Game_State, game_sound *Sound, audio_playback Playback)
+{
+   audio_track *Track;
+   if(Game_State->Free_Audio_Tracks)
+   {
+      Track = Game_State->Free_Audio_Tracks;
+      Game_State->Free_Audio_Tracks = Game_State->Free_Audio_Tracks->Next;
+   }
+   else
+   {
+      Track = Allocate(&Game_State->Arena, audio_track, 1);
+   }
+
+   Track->Sound = Sound;
+   Track->Next = Game_State->Audio_Tracks;
+   Track->Sample_Index = 0;
+   Track->Playback = Playback;
+
+   Game_State->Audio_Tracks = Track;
+}
+
 UPDATE(Update)
 {
    game_state *Game_State = (game_state *)Memory.Base;
@@ -566,6 +605,8 @@ UPDATE(Update)
       Game_State->Downstairs = Load_Image(Arena, "data/downstairs.png");
 
       Game_State->Background_Music = Load_Wave(Arena, *Scratch, "data/bgm.wav");
+      Game_State->Clap = Load_Wave(Arena, *Scratch, "data/clap.wav");
+      Play_Sound(Game_State, &Game_State->Background_Music, Audio_Playback_Loop);
 
       Game_State->Textbox_Dialogue[1] = S(
          "THE FIRST WORLD\n"
@@ -607,6 +648,11 @@ UPDATE(Update)
       game_controller *Controller = Input->Controllers + Controller_Index;
       if(Controller->Connected)
       {
+         if(Was_Pressed(Controller->Action_Left))
+         {
+            Play_Sound(Game_State, &Game_State->Clap, Audio_Playback_Once);
+         }
+
          entity *Player = Game_State->Players[Controller_Index];
          Controller->Connected ? Activate_Entity(Player) : Deactivate_Entity(Player);
 
@@ -903,27 +949,53 @@ MIX_SOUND(Mix_Sound)
 {
    game_state *Game_State = (game_state *)Memory.Base;
 
-   s16 *Out = Audio->Samples;
-   for(int Sample_Index = 0; Sample_Index < Audio->Sample_Count; ++Sample_Index)
+   s16 *Destination = Audio_Output->Samples;
+   for(int Sample_Index = 0; Sample_Index < Audio_Output->Sample_Count; ++Sample_Index)
    {
-#if 0
-      float Phase = 256.0f * (float)Game_State->Running_Sample_Index / (float)GAME_AUDIO_FREQUENCY;
-      float Volume = 3000.0f;
+      for(int Channel_Index = 0; Channel_Index < GAME_AUDIO_CHANNEL_COUNT; ++Channel_Index)
+      {
+         *Destination++ = 0;
+      }
+   }
 
-      s16 Sample = (s16)(Volume * Sine(Phase));
-      for(int Channel_Index = 0; Channel_Index < GAME_AUDIO_CHANNEL_COUNT; ++Channel_Index)
+   audio_track **Track_Ptr = &Game_State->Audio_Tracks;
+   while(*Track_Ptr)
+   {
+      audio_track *Track = *Track_Ptr;
+
+      game_sound *Sound = Track->Sound;
+      s16 *Destination = Audio_Output->Samples;
+
+      int Samples_Left = Sound->Sample_Count - Track->Sample_Index;
+      int Sample_Count = Audio_Output->Sample_Count;
+      if(Track->Playback == Audio_Playback_Once && Samples_Left < Sample_Count)
       {
-         *Out++ = Sample;
+         Sample_Count = Samples_Left;
       }
-      Game_State->Running_Sample_Index++;
-      Game_State->Running_Sample_Index %= GAME_AUDIO_FREQUENCY;
-#else
-      for(int Channel_Index = 0; Channel_Index < GAME_AUDIO_CHANNEL_COUNT; ++Channel_Index)
+
+      for(int Sample_Index = 0; Sample_Index < Sample_Count; ++Sample_Index)
       {
-         *Out++ = Game_State->Background_Music.Samples[Channel_Index][Game_State->Running_Sample_Index];
+         for(int Channel_Index = 0; Channel_Index < GAME_AUDIO_CHANNEL_COUNT; ++Channel_Index)
+         {
+            *Destination++ += Sound->Samples[Channel_Index][Track->Sample_Index];
+         }
+
+         Track->Sample_Index++;
+         if(Track->Playback == Audio_Playback_Loop)
+         {
+            Track->Sample_Index %= Sound->Sample_Count;
+         }
       }
-      Game_State->Running_Sample_Index++;
-      Game_State->Running_Sample_Index %= Game_State->Background_Music.Sample_Count;
-#endif
+
+      if(Track->Playback == Audio_Playback_Once && Track->Sample_Index == Sound->Sample_Count)
+      {
+         *Track_Ptr = Track->Next;
+         Track->Next = Game_State->Free_Audio_Tracks;
+         Game_State->Free_Audio_Tracks = Track;
+      }
+      else
+      {
+         Track_Ptr = &Track->Next;
+      }
    }
 }

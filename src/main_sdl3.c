@@ -259,9 +259,9 @@ int main(void)
    game_input Inputs[16] = {0};
 
 #define AUDIO_FRAME_BUFFER_SAMPLE_COUNT 1024
-   game_audio_output Audio = {0};
-   size Audio_Samples_Size = sizeof(*Audio.Samples) * AUDIO_FRAME_BUFFER_SAMPLE_COUNT * GAME_AUDIO_CHANNEL_COUNT;
-   Audio.Samples = SDL_calloc(1, Audio_Samples_Size);
+   game_audio_output Audio_Output = {0};
+   size Audio_Output_Size = sizeof(*Audio_Output.Samples) * AUDIO_FRAME_BUFFER_SAMPLE_COUNT * GAME_AUDIO_CHANNEL_COUNT;
+   Audio_Output.Samples = SDL_calloc(1, Audio_Output_Size);
 
    work_queue Queue = {0};
    Queue.Semaphore = SDL_CreateSemaphore(0);
@@ -491,12 +491,12 @@ int main(void)
       {
          SDL_Log("Failed to query audio queue size: %s", SDL_GetError());
       }
-      else if(Bytes_Queued < Audio_Samples_Size)
+      else if(Bytes_Queued < Audio_Output_Size)
       {
-         Audio.Sample_Count = Audio_Samples_Size / (GAME_AUDIO_CHANNEL_COUNT * sizeof(*Audio.Samples));
-         Mix_Sound(Memory, &Audio);
+         Audio_Output.Sample_Count = Audio_Output_Size / (GAME_AUDIO_CHANNEL_COUNT * sizeof(*Audio_Output.Samples));
+         Mix_Sound(Memory, &Audio_Output);
 
-         if(!SDL_PutAudioStreamData(Sdl.Audio_Stream, Audio.Samples, Audio_Samples_Size))
+         if(!SDL_PutAudioStreamData(Sdl.Audio_Stream, Audio_Output.Samples, Audio_Output_Size))
          {
             SDL_Log("Failed to fill audio stream: %s", SDL_GetError());
          }
