@@ -43,6 +43,8 @@ typedef struct {
 
    game_texture Upstairs;
    game_texture Downstairs;
+
+   int Running_Sample_Index;
    game_sound Background_Music;
 
    map Map;
@@ -894,5 +896,34 @@ UPDATE(Update)
          Draw_Outline(Backbuffer, Gui_X, Gui_Y, Gui_Dim, Gui_Dim, 2*Border_Pixels, 0x00FF00FF);
       }
       Gui_X += (2 * Gui_Dim);
+   }
+}
+
+MIX_SOUND(Mix_Sound)
+{
+   game_state *Game_State = (game_state *)Memory.Base;
+
+   s16 *Out = Audio->Samples;
+   for(int Sample_Index = 0; Sample_Index < Audio->Sample_Count; ++Sample_Index)
+   {
+#if 0
+      float Phase = 256.0f * (float)Game_State->Running_Sample_Index / (float)GAME_AUDIO_FREQUENCY;
+      float Volume = 3000.0f;
+
+      s16 Sample = (s16)(Volume * Sine(Phase));
+      for(int Channel_Index = 0; Channel_Index < GAME_AUDIO_CHANNEL_COUNT; ++Channel_Index)
+      {
+         *Out++ = Sample;
+      }
+      Game_State->Running_Sample_Index++;
+      Game_State->Running_Sample_Index %= GAME_AUDIO_FREQUENCY;
+#else
+      for(int Channel_Index = 0; Channel_Index < GAME_AUDIO_CHANNEL_COUNT; ++Channel_Index)
+      {
+         *Out++ = Game_State->Background_Music.Samples[Channel_Index][Game_State->Running_Sample_Index];
+      }
+      Game_State->Running_Sample_Index++;
+      Game_State->Running_Sample_Index %= Game_State->Background_Music.Sample_Count;
+#endif
    }
 }

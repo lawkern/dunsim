@@ -226,6 +226,11 @@ typedef struct {
    s16 *Samples[GAME_AUDIO_CHANNEL_COUNT];
 } game_sound;
 
+typedef struct {
+   int Sample_Count;
+   s16 *Samples;
+} game_audio_output;
+
 #define WORK_QUEUE_TASK(Name) void Name(void *Data)
 typedef WORK_QUEUE_TASK(work_queue_task);
 
@@ -248,6 +253,9 @@ typedef struct {
 // Game API:
 #define UPDATE(Name) void Name(game_memory Memory, game_texture Backbuffer, game_input *Input, work_queue *Queue, float Frame_Seconds)
 UPDATE(Update);
+
+#define MIX_SOUND(Name) void Name(game_memory Memory, game_audio_output *Audio)
+MIX_SOUND(Mix_Sound);
 
 // Platform API:
 #define LOG(Name) void Name(char *Format, ...)

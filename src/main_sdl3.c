@@ -243,10 +243,6 @@ int main(void)
    }
    SDL_ResumeAudioStreamDevice(Sdl.Audio_Stream);
 
-#define AUDIO_FRAME_BUFFER_SAMPLE_COUNT 1024
-   size Audio_Samples_Size = sizeof(s16) * AUDIO_FRAME_BUFFER_SAMPLE_COUNT * GAME_AUDIO_CHANNEL_COUNT;
-   s16 *Audio_Samples = SDL_calloc(1, Audio_Samples_Size);
-
    // Initialize game.
    game_memory Memory = {0};
    Memory.Size = Megabytes(256);
@@ -261,6 +257,11 @@ int main(void)
 
    int Input_Index = 0;
    game_input Inputs[16] = {0};
+
+#define AUDIO_FRAME_BUFFER_SAMPLE_COUNT 1024
+   game_audio_output Audio = {0};
+   size Audio_Samples_Size = sizeof(*Audio.Samples) * AUDIO_FRAME_BUFFER_SAMPLE_COUNT * GAME_AUDIO_CHANNEL_COUNT;
+   Audio.Samples = SDL_calloc(1, Audio_Samples_Size);
 
    work_queue Queue = {0};
    Queue.Semaphore = SDL_CreateSemaphore(0);
@@ -485,29 +486,17 @@ int main(void)
       Update(Memory, Backbuffer, Input ,&Queue, Sdl.Actual_Frame_Seconds);
 
       // Fill audio.
-      static int Running_Sample_Index = 0;
-      int Minimum_Audio_Size = GAME_AUDIO_FREQUENCY * sizeof(s16);
       int Bytes_Queued = SDL_GetAudioStreamQueued(Sdl.Audio_Stream);
       if(Bytes_Queued < 0)
       {
          SDL_Log("Failed to query audio queue size: %s", SDL_GetError());
       }
-      else if(Bytes_Queued < Minimum_Audio_Size)
+      else if(Bytes_Queued < Audio_Samples_Size)
       {
-         for(int Sample_Index = 0; Sample_Index < AUDIO_FRAME_BUFFER_SAMPLE_COUNT; ++Sample_Index)
-         {
-            float Phase = 256.0f * (float)Running_Sample_Index / (float)GAME_AUDIO_FREQUENCY;
-            float Volume = 1000.0f;
-            s16 Sample = (s16)(Volume * Sine(Phase));
-            for(int Channel_Index = 0; Channel_Index < GAME_AUDIO_CHANNEL_COUNT; ++Channel_Index)
-            {
-               Audio_Samples[GAME_AUDIO_CHANNEL_COUNT*Sample_Index + Channel_Index] = Sample;
-            }
-            Running_Sample_Index++;
-            Running_Sample_Index %= GAME_AUDIO_FREQUENCY;
-         }
+         Audio.Sample_Count = Audio_Samples_Size / (GAME_AUDIO_CHANNEL_COUNT * sizeof(*Audio.Samples));
+         Mix_Sound(Memory, &Audio);
 
-         if(!SDL_PutAudioStreamData(Sdl.Audio_Stream, Audio_Samples, Audio_Samples_Size))
+         if(!SDL_PutAudioStreamData(Sdl.Audio_Stream, Audio.Samples, Audio_Samples_Size))
          {
             SDL_Log("Failed to fill audio stream: %s", SDL_GetError());
          }

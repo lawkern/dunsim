@@ -188,6 +188,7 @@ static game_sound Load_Wave(arena *Arena, arena Scratch, char *Path)
             Assert(Chunk->Format == WAVE_FORMAT_PCM);
             Assert(Chunk->Samples_Per_Second == GAME_AUDIO_FREQUENCY);
             Assert(Chunk->Channel_Count == GAME_AUDIO_CHANNEL_COUNT);
+            Assert((Chunk->Block_Align / Chunk->Channel_Count) == sizeof(*Result.Samples[0]));
 
             At += sizeof(*Header) + Header->Chunk_Size;
          } break;
@@ -196,7 +197,7 @@ static game_sound Load_Wave(arena *Arena, arena Scratch, char *Path)
             wave_data_chunk *Chunk = (wave_data_chunk *)At;
             Header->Chunk_Size = (Header->Chunk_Size + 1) & ~1;
 
-            Result.Sample_Count = Header->Chunk_Size / (GAME_AUDIO_CHANNEL_COUNT * sizeof(s16));
+            Result.Sample_Count = Header->Chunk_Size / (GAME_AUDIO_CHANNEL_COUNT * sizeof(*Result.Samples[0]));
 
             s16 *Source = Chunk->Data;
             s16 *Destination = Allocate(Arena, s16, Result.Sample_Count*GAME_AUDIO_CHANNEL_COUNT);
@@ -218,7 +219,7 @@ static game_sound Load_Wave(arena *Arena, arena Scratch, char *Path)
          } break;
 
          default: {
-            Assert(0);
+            At += sizeof(*Header) + Header->Chunk_Size;
          } break;
       }
    }
