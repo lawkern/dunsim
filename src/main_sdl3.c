@@ -260,27 +260,22 @@ int main(void)
    Memory.Base = SDL_calloc(1, Memory.Size);
    SDL_assert(Memory.Base);
 
-   game_texture Backbuffer = {0};
-   Backbuffer.Width = Texture_Width;
-   Backbuffer.Height = Texture_Height;
-   Backbuffer.Memory = SDL_calloc(Texture_Width*Texture_Height, sizeof(*Backbuffer.Memory));
-   SDL_assert(Backbuffer.Memory);
+   renderer Renderer = {0};
+   Renderer.Backbuffer.Width = Texture_Width;
+   Renderer.Backbuffer.Height = Texture_Height;
 
    int Input_Index = 0;
    game_input Inputs[16] = {0};
 
-#define AUDIO_FRAME_BUFFER_SAMPLE_COUNT 2048
    game_audio_output Audio_Output = {0};
-   size Audio_Output_Size = sizeof(*Audio_Output.Samples) * AUDIO_FRAME_BUFFER_SAMPLE_COUNT * GAME_AUDIO_CHANNEL_COUNT;
-   Audio_Output.Samples = SDL_calloc(1, Audio_Output_Size);
 
-   work_queue Queue = {0};
-   Queue.Semaphore = SDL_CreateSemaphore(0);
+   work_queue Work_Queue = {0};
+   Work_Queue.Semaphore = SDL_CreateSemaphore(0);
 
    int Core_Count = SDL_GetNumLogicalCPUCores();
    for(int Thread_Index = 1; Thread_Index < Core_Count; ++Thread_Index)
    {
-      SDL_Thread *Thread = SDL_CreateThread(Sdl_Thread_Procedure, 0, &Queue);
+      SDL_Thread *Thread = SDL_CreateThread(Sdl_Thread_Procedure, 0, &Work_Queue);
       if(Thread)
       {
          SDL_DetachThread(Thread);
@@ -494,20 +489,23 @@ int main(void)
       Input->Mouse_Y = (Raw_Mouse_Y - Dst_Rect.y) / Dst_Rect.h;
 
       // Update game state.
-      Update(Memory, Backbuffer, Input ,&Queue, Sdl.Actual_Frame_Seconds);
+      Update(Memory, Input, &Renderer, &Work_Queue, Sdl.Actual_Frame_Seconds);
 
       // Fill audio.
+      size Bytes_Per_Sample = GAME_AUDIO_CHANNEL_COUNT * sizeof(*Audio_Output.Samples);
+      size Max_Audio_Output_Size = 2048 * Bytes_Per_Sample;
+
       int Bytes_Queued = SDL_GetAudioStreamQueued(Sdl.Audio_Stream);
       if(Bytes_Queued < 0)
       {
          SDL_Log("Failed to query audio queue size: %s", SDL_GetError());
       }
-      else if(Bytes_Queued < Audio_Output_Size)
+      else if(Bytes_Queued < Max_Audio_Output_Size)
       {
-         Audio_Output.Sample_Count = Audio_Output_Size / (GAME_AUDIO_CHANNEL_COUNT * sizeof(*Audio_Output.Samples));
+         Audio_Output.Sample_Count = Max_Audio_Output_Size / Bytes_Per_Sample;
          Mix_Sound(Memory, &Audio_Output);
 
-         if(!SDL_PutAudioStreamData(Sdl.Audio_Stream, Audio_Output.Samples, Audio_Output_Size))
+         if(!SDL_PutAudioStreamData(Sdl.Audio_Stream, Audio_Output.Samples, Max_Audio_Output_Size))
          {
             SDL_Log("Failed to fill audio stream: %s", SDL_GetError());
          }
@@ -517,7 +515,9 @@ int main(void)
       SDL_SetRenderDrawColor(Sdl.Renderer, 0, 0, 0, 255);
       SDL_RenderClear(Sdl.Renderer);
 
-      SDL_UpdateTexture(Sdl.Texture, 0, Backbuffer.Memory, Backbuffer.Width * sizeof(*Backbuffer.Memory));
+      void *Backbuffer_Memory = Renderer.Backbuffer.Memory;
+      size Backbuffer_Size = Renderer.Backbuffer.Width * sizeof(*Renderer.Backbuffer.Memory);
+      SDL_UpdateTexture(Sdl.Texture, 0, Backbuffer_Memory, Backbuffer_Size);
       SDL_RenderTexture(Sdl.Renderer, Sdl.Texture, 0, &Dst_Rect);
       SDL_RenderPresent(Sdl.Renderer);
 

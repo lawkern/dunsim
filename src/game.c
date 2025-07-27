@@ -8,6 +8,7 @@
 #include "assets.c"
 #include "map.c"
 #include "entity.c"
+#include "render.c"
 
 typedef enum {
    Audio_Playback_Once,
@@ -25,7 +26,7 @@ struct audio_track
 };
 
 typedef struct {
-   arena Arena;
+   arena Permanent;
    arena Scratch;
    random_entropy Entropy;
 
@@ -35,8 +36,8 @@ typedef struct {
    int Active_Textbox_Index;
    string Textbox_Dialogue[4];
 
-   game_texture Upstairs;
-   game_texture Downstairs;
+   texture Upstairs;
+   texture Downstairs;
 
    game_sound Background_Music;
    game_sound Clap;
@@ -53,85 +54,6 @@ typedef struct {
    audio_track *Audio_Tracks;
    audio_track *Free_Audio_Tracks;
 } game_state;
-
-static void Clear(game_texture Destination, u32 Color)
-{
-   for(int Y = 0; Y < Destination.Height; ++Y)
-   {
-      for(int X = 0; X < Destination.Width; ++X)
-      {
-         Destination.Memory[(Destination.Width * Y) + X] = Color;
-      }
-   }
-}
-
-static void Draw_Rectangle(game_texture Destination, int X, int Y, int Width, int Height, u32 Color)
-{
-   int Min_X = Maximum(X, 0);
-   int Min_Y = Maximum(Y, 0);
-   int Max_X = Minimum(Destination.Width, X + Width);
-   int Max_Y = Minimum(Destination.Height, Y + Height);
-
-   for(int Y = Min_Y; Y < Max_Y; ++Y)
-   {
-      for(int X = Min_X; X < Max_X; ++X)
-      {
-         Destination.Memory[(Destination.Width * Y) + X] = Color;
-      }
-   }
-}
-
-static void Draw_Outline(game_texture Destination, int X, int Y, int Width, int Height, int Weight, u32 Color)
-{
-   Draw_Rectangle(Destination, X, Y, Width-Weight, Weight, Color); // Top
-   Draw_Rectangle(Destination, X+Weight, Y+Height-Weight, Width-Weight, Weight, Color); // Bottom
-   Draw_Rectangle(Destination, X, Y+Weight, Weight, Height-Weight, Color); // Left
-   Draw_Rectangle(Destination, X+Width-Weight, Y, Weight, Height-Weight, Color); // Right
-}
-
-static void Draw_Bitmap(game_texture Destination, game_texture Source, float X, float Y)
-{
-   X += Source.Offset_X;
-   Y += Source.Offset_Y;
-
-   int Min_X = Maximum(X, 0);
-   int Min_Y = Maximum(Y, 0);
-   int Max_X = Minimum(Destination.Width, X + Source.Width);
-   int Max_Y = Minimum(Destination.Height, Y + Source.Height);
-
-   int Clip_X_Offset = Min_X - X;
-   int Clip_Y_Offset = Min_Y - Y;
-
-   u32 *Source_Row = Source.Memory + Clip_Y_Offset*Source.Width;
-   for(int Destination_Y = Min_Y; Destination_Y < Max_Y; ++Destination_Y)
-   {
-      int X_Offset = Clip_X_Offset;
-      u32 *Destination_Row = Destination.Memory + Destination.Width*Destination_Y;
-
-      for(int Destination_X = Min_X; Destination_X < Max_X; ++Destination_X)
-      {
-         u32 Source_Pixel = Source_Row[X_Offset++];
-         u32 *Destination_Pixel = Destination_Row + Destination_X;
-
-         float SR = (float)((Source_Pixel >> 24) & 0xFF);
-         float SG = (float)((Source_Pixel >> 16) & 0xFF);
-         float SB = (float)((Source_Pixel >>  8) & 0xFF);
-         float SA = (float)((Source_Pixel >>  0) & 0xFF) / 255.0f;
-
-         float DR = (float)((*Destination_Pixel >> 24) & 0xFF);
-         float DG = (float)((*Destination_Pixel >> 16) & 0xFF);
-         float DB = (float)((*Destination_Pixel >>  8) & 0xFF);
-
-         u32 R = (u32)((DR * (1.0f-SA) + SR) + 0.5f);
-         u32 G = (u32)((DG * (1.0f-SA) + SG) + 0.5f);
-         u32 B = (u32)((DB * (1.0f-SA) + SB) + 0.5f);
-
-         *Destination_Pixel = (R<<24) | (G<<16) | (B<<8) | 0xFF;
-      }
-
-      Source_Row += Source.Width;
-   }
-}
 
 static void Advance_Text_Line(text_font *Font, text_size Size, int *Y)
 {
@@ -160,7 +82,7 @@ static int Get_Text_Width(text_font *Font, text_size Size, string Text)
    return(Result);
 }
 
-static void Draw_Text(game_texture Destination, text_font *Font, text_size Size, int X, int Y, string Text)
+static void Push_Text(renderer *Renderer, text_font *Font, text_size Size, int X, int Y, string Text)
 {
    if(Font->Loaded)
    {
@@ -171,8 +93,8 @@ static void Draw_Text(game_texture Destination, text_font *Font, text_size Size,
       {
          int Codepoint = Text.Data[Index];
 
-         game_texture Glyph = Glyphs->Bitmaps[Codepoint];
-         Draw_Bitmap(Destination, Glyph, X, Y);
+         texture Glyph = Glyphs->Bitmaps[Codepoint];
+         Push_Texture(Renderer, Render_Layer_UI, Glyph, X, Y);
 
          if(Index != Text.Length-1)
          {
@@ -185,7 +107,7 @@ static void Draw_Text(game_texture Destination, text_font *Font, text_size Size,
 }
 
 typedef struct {
-   game_texture Destination;
+   renderer *Renderer;
    int X;
    int Y;
 
@@ -193,10 +115,10 @@ typedef struct {
    text_size Size;
 } text_context;
 
-static text_context Begin_Text(game_texture Destination, int X, int Y, text_font *Font, text_size Size)
+static text_context Begin_Text(renderer *Renderer, int X, int Y, text_font *Font, text_size Size)
 {
    text_context Result = {0};
-   Result.Destination = Destination;
+   Result.Renderer = Renderer;
    Result.X = X;
    Result.Y = Y;
    Result.Font = Font;
@@ -218,10 +140,10 @@ static void Text_Line(text_context *Text, char *Format, ...)
    String.Length = vsnprintf(Data, sizeof(Data), Format, Arguments);
    va_end(Arguments);
 
-   Draw_Text(Text->Destination, Text->Font, Text->Size, Text->X, Text->Y, String);
+   Push_Text(Text->Renderer, Text->Font, Text->Size, Text->X, Text->Y, String);
 }
 
-static void Draw_Textbox(game_state *Game_State, game_texture Destination, string Text)
+static void Display_Textbox(game_state *Game_State, renderer *Renderer, string Text)
 {
    text_font *Font = &Game_State->Varia_Font;
    if(Font->Loaded)
@@ -238,11 +160,11 @@ static void Draw_Textbox(game_state *Game_State, game_texture Destination, strin
       int Line_Count = 1;
       int Max_Line_Count = 6;
 
-      int Box_Width = Destination.Width - 2*Margin;
+      int Box_Width = Renderer->Backbuffer.Width - 2*Margin;
       int Box_Height = Max_Line_Count*Line_Advance + 2*Padding;
       int Box_X = Margin;
-      int Box_Y = Destination.Height - Margin - Box_Height;
-      Draw_Rectangle(Destination, Box_X, Box_Y, Box_Width, Box_Height, 0x000000FF);
+      int Box_Y = Renderer->Backbuffer.Height - Margin - Box_Height;
+      Push_Rectangle(Renderer, Render_Layer_UI, Box_X, Box_Y, Box_Width, Box_Height, 0x000000FF);
 
       int Text_X = Margin + Padding;
       int Text_Y = Box_Y + Padding + Scale*Font->Ascent;
@@ -273,8 +195,8 @@ static void Draw_Textbox(game_state *Game_State, game_texture Destination, strin
             }
             else
             {
-               game_texture Glyph = Glyphs->Bitmaps[Codepoint];
-               Draw_Bitmap(Destination, Glyph, Text_X, Text_Y);
+               texture Glyph = Glyphs->Bitmaps[Codepoint];
+               Push_Texture(Renderer, Render_Layer_UI, Glyph, Text_X, Text_Y);
 
                int Next_Codepoint = (Index != Word.Length-1) ? Word.Data[Index + 1] : ' ';
                int Pair_Index = (Codepoint * GLYPH_COUNT) + Next_Codepoint;
@@ -511,7 +433,7 @@ static void Play_Sound(game_state *Game_State, game_sound *Sound, audio_playback
    }
    else
    {
-      Track = Allocate(&Game_State->Arena, audio_track, 1);
+      Track = Allocate(&Game_State->Permanent, audio_track, 1);
    }
 
    Track->Sound = Sound;
@@ -526,27 +448,41 @@ UPDATE(Update)
 {
    game_state *Game_State = (game_state *)Memory.Base;
 
-   arena *Arena = &Game_State->Arena;
+   arena *Permanent = &Game_State->Permanent;
    arena *Scratch = &Game_State->Scratch;
+
    random_entropy *Entropy = &Game_State->Entropy;
    map *Map = &Game_State->Map;
 
+   int Backbuffer_Width = Renderer->Backbuffer.Width;
+   int Backbuffer_Height = Renderer->Backbuffer.Height;
+
    int Tile_Count_X = 40;
-   int Tile_Pixels = Backbuffer.Width / Tile_Count_X;
-   int Tile_Count_Y = Backbuffer.Height / Tile_Pixels;
+   int Tile_Pixels = Backbuffer_Width / Tile_Count_X;
+   int Tile_Count_Y = Backbuffer_Height / Tile_Pixels;
 
-   if(!Arena->Begin)
+   if(!Permanent->Begin)
    {
-      Arena->Begin = Memory.Base + sizeof(*Game_State);
-      Arena->End = Arena->Begin + Megabytes(64);
+      // Initialize memory.
+      Permanent->Begin = Memory.Base + sizeof(*Game_State);
+      Permanent->End = Permanent->Begin + Megabytes(64);
 
-      Map->Arena.Begin = Arena->End;
+      Map->Arena.Begin = Permanent->End;
       Map->Arena.End = Map->Arena.Begin + Megabytes(16);
 
       Scratch->Begin = Map->Arena.End;
       Scratch->End = Memory.Base + Memory.Size;
 
       Assert(Scratch->Begin < Scratch->End);
+
+      // Initialize renderer.
+      Renderer->Backbuffer.Memory = Allocate(Permanent, u32, Backbuffer_Width*Backbuffer_Height);
+      for(int Queue_Index = 0; Queue_Index < Array_Count(Renderer->Queues); ++Queue_Index)
+      {
+         Renderer->Queues[Queue_Index] = Allocate(Permanent, render_queue, 1);
+      }
+
+      // Initialize audio.
 
       string Test = S("This is a test file.");
       Write_Entire_File(Test.Data, Test.Length, "data/test.txt");
@@ -638,18 +574,18 @@ UPDATE(Update)
          }
       }
 
-      Load_Font(&Game_State->Varia_Font, Arena, *Scratch, "data/Inter.ttf", Tile_Pixels);
-      Load_Font(&Game_State->Fixed_Font, Arena, *Scratch, "data/JetBrainsMono.ttf", Tile_Pixels);
+      Load_Font(&Game_State->Varia_Font, Permanent, *Scratch, "data/Inter.ttf", Tile_Pixels);
+      Load_Font(&Game_State->Fixed_Font, Permanent, *Scratch, "data/JetBrainsMono.ttf", Tile_Pixels);
       if(!Game_State->Varia_Font.Loaded)
       {
          Log("During development, make sure to run the program from the project root folder.");
       }
 
-      Game_State->Upstairs = Load_Image(Arena, "data/upstairs.png");
-      Game_State->Downstairs = Load_Image(Arena, "data/downstairs.png");
+      Game_State->Upstairs = Load_Image(Permanent, "data/upstairs.png");
+      Game_State->Downstairs = Load_Image(Permanent, "data/downstairs.png");
 
-      Game_State->Background_Music = Load_Wave(Arena, *Scratch, "data/bgm.wav");
-      Game_State->Clap = Load_Wave(Arena, *Scratch, "data/clap.wav");
+      Game_State->Background_Music = Load_Wave(Permanent, *Scratch, "data/bgm.wav");
+      Game_State->Clap = Load_Wave(Permanent, *Scratch, "data/clap.wav");
       Play_Sound(Game_State, &Game_State->Background_Music, Audio_Playback_Loop);
 
       Game_State->Textbox_Dialogue[1] = S(
@@ -811,15 +747,15 @@ UPDATE(Update)
    };
    u32 *Palette = Palettes[Camera_Position.Z];
 
-   Clear(Backbuffer, Palette[0]);
+   Push_Clear(Renderer, Render_Layer_Background, Palette[0]);
 
    // TODO: Loop over the surrounding chunks instead of tiles so that we don't
    // have to query for the chunk on each iteration.
 
    int Border_Pixels = Maximum(1, Tile_Pixels / 16);
 
-   int Mouse_X_Pixel = Input->Mouse_X * (float)Backbuffer.Width;
-   int Mouse_Y_Pixel = Input->Mouse_Y * (float)Backbuffer.Height;
+   int Mouse_X_Pixel = Input->Mouse_X * (float)Backbuffer_Width;
+   int Mouse_Y_Pixel = Input->Mouse_Y * (float)Backbuffer_Height;
 
    for(int Chunk_Y = Camera_Chunk_Position.Y-1; Chunk_Y <= Camera_Chunk_Position.Y+1; ++Chunk_Y)
    {
@@ -847,8 +783,8 @@ UPDATE(Update)
                      int Offset_Y = 0;
 #endif
 
-                     int Pixel_X = Tile_Pixels * (Entity->Position.X - Camera_Position.X) + Backbuffer.Width/2 - Offset_X;
-                     int Pixel_Y = Tile_Pixels * (Entity->Position.Y - Camera_Position.Y) + Backbuffer.Height/2 - Offset_Y;
+                     int Pixel_X = Tile_Pixels * (Entity->Position.X - Camera_Position.X) + Backbuffer_Width/2 - Offset_X;
+                     int Pixel_Y = Tile_Pixels * (Entity->Position.Y - Camera_Position.Y) + Backbuffer_Height/2 - Offset_Y;
 
                      if(Was_Pressed(Input->Mouse_Button_Left))
                      {
@@ -874,35 +810,39 @@ UPDATE(Update)
                      switch(Entity->Type)
                      {
                         case Entity_Type_Player: {
-                           Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 0x000088FF);
-                           Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 4*Border_Pixels, 0xFFFFFFFF);
-
-                           Draw_Rectangle(Backbuffer, Nose_X, Nose_Y, Nose_Dim, Nose_Dim, 0x0000FFFF);
+                           render_layer Layer = Render_Layer_Foreground;
+                           Push_Rectangle(Renderer, Layer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 0x000088FF);
+                           Push_Outline(Renderer, Layer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 4*Border_Pixels, 0xFFFFFFFF);
+                           Push_Rectangle(Renderer, Layer, Nose_X, Nose_Y, Nose_Dim, Nose_Dim, 0x0000FFFF);
                         } break;
 
                         case Entity_Type_Dragon: {
-                           Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 0x880000FF);
-                           Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 4*Border_Pixels, 0xFF0000FF);
-
-                           Draw_Rectangle(Backbuffer, Nose_X, Nose_Y, Nose_Dim, Nose_Dim, 0xFFFF00FF);
+                           render_layer Layer = Render_Layer_Foreground;
+                           Push_Rectangle(Renderer, Layer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 0x880000FF);
+                           Push_Outline(Renderer, Layer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 4*Border_Pixels, 0xFF0000FF);
+                           Push_Rectangle(Renderer, Layer, Nose_X, Nose_Y, Nose_Dim, Nose_Dim, 0xFFFF00FF);
                         } break;
 
                         case Entity_Type_Floor: {
-                           Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Tile_Pixels, Tile_Pixels, Palette[0]);
-                           Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Tile_Pixels, Tile_Pixels, Border_Pixels, Palette[1]);
+                           render_layer Layer = Render_Layer_Background;
+                           Push_Rectangle(Renderer, Layer, Pixel_X, Pixel_Y, Tile_Pixels, Tile_Pixels, Palette[0]);
+                           Push_Outline(Renderer, Layer, Pixel_X, Pixel_Y, Tile_Pixels, Tile_Pixels, Border_Pixels, Palette[1]);
                         } break;
 
                         case Entity_Type_Wall: {
-                           Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Tile_Pixels, Tile_Pixels, Palette[2]);
-                           Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Tile_Pixels, Tile_Pixels, Border_Pixels, Palette[1]);
+                           render_layer Layer = Render_Layer_Background;
+                           Push_Rectangle(Renderer, Layer, Pixel_X, Pixel_Y, Tile_Pixels, Tile_Pixels, Palette[2]);
+                           Push_Outline(Renderer, Layer, Pixel_X, Pixel_Y, Tile_Pixels, Tile_Pixels, Border_Pixels, Palette[1]);
                         } break;
 
                         case Entity_Type_Stairs: {
-                           game_texture Bitmap = (Entity->Position.Z == 0) ? Game_State->Upstairs : Game_State->Downstairs;
-                           Draw_Bitmap(Backbuffer, Bitmap, Pixel_X, Pixel_Y);
-                           Draw_Bitmap(Backbuffer, Bitmap, Pixel_X+Tile_Pixels, Pixel_Y);
-                           Draw_Bitmap(Backbuffer, Bitmap, Pixel_X, Pixel_Y+Tile_Pixels);
-                           Draw_Bitmap(Backbuffer, Bitmap, Pixel_X+Tile_Pixels, Pixel_Y+Tile_Pixels);
+                           render_layer Layer = Render_Layer_Background;
+                           texture Texture = (Entity->Position.Z == 0) ? Game_State->Upstairs : Game_State->Downstairs;
+
+                           Push_Texture(Renderer, Layer, Texture, Pixel_X, Pixel_Y);
+                           Push_Texture(Renderer, Layer, Texture, Pixel_X+Tile_Pixels, Pixel_Y);
+                           Push_Texture(Renderer, Layer, Texture, Pixel_X, Pixel_Y+Tile_Pixels);
+                           Push_Texture(Renderer, Layer, Texture, Pixel_X+Tile_Pixels, Pixel_Y+Tile_Pixels);
                         } break;
 
                         default: {
@@ -911,7 +851,7 @@ UPDATE(Update)
 
                      if(Entity_Index == Game_State->Selected_Debug_Entity_ID)
                      {
-                        Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 4*Border_Pixels, 0x00FF00FF);
+                        Push_Outline(Renderer, Render_Layer_UI, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 4*Border_Pixels, 0x00FF00FF);
                      }
                   }
                }
@@ -921,13 +861,13 @@ UPDATE(Update)
    }
 
    // User Interface.
-   text_context Text = Begin_Text(Backbuffer, Tile_Pixels/2, 0, &Game_State->Varia_Font, Text_Size_Large);
+   text_context Text = Begin_Text(Renderer, Tile_Pixels/2, 0, &Game_State->Varia_Font, Text_Size_Large);
    Text_Line(&Text, "Dungeon Simulator");
 
    Text.Font = &Game_State->Fixed_Font;
    Text.Size = Text_Size_Medium;
    Text_Line(&Text, "Frame Time: %3.3fms", Frame_Seconds*1000.0f);
-   Text_Line(&Text, "Arena: %zuMB", (Arena->End - Arena->Begin) / (1024 * 1024));
+   Text_Line(&Text, "Permanent: %zuMB", (Permanent->End - Permanent->Begin) / (1024 * 1024));
    Text_Line(&Text, "Map: %zuMB", (Map->Arena.End - Map->Arena.Begin) / (1024 * 1024));
    Text_Line(&Text, "Scratch: %zuMB", (Scratch->End - Scratch->Begin) / (1024 * 1024));
    Text_Line(&Text, "Mouse: {%0.2f, %0.2f}", Input->Mouse_X, Input->Mouse_Y);
@@ -985,11 +925,11 @@ UPDATE(Update)
 
    if(Game_State->Active_Textbox_Index)
    {
-      Draw_Textbox(Game_State, Backbuffer, Game_State->Textbox_Dialogue[Game_State->Active_Textbox_Index]);
+      Display_Textbox(Game_State, Renderer, Game_State->Textbox_Dialogue[Game_State->Active_Textbox_Index]);
    }
 
    int Gui_Dim = Tile_Pixels;
-   int Gui_X = Backbuffer.Width - 2*Gui_Dim*GAME_CONTROLLER_COUNT;
+   int Gui_X = Backbuffer_Width - 2*Gui_Dim*GAME_CONTROLLER_COUNT;
    int Gui_Y = Gui_Dim;
 
    for(int Controller_Index = 0; Controller_Index < GAME_CONTROLLER_COUNT; ++Controller_Index)
@@ -998,20 +938,28 @@ UPDATE(Update)
 
       if(Controller->Connected)
       {
-         Draw_Rectangle(Backbuffer, Gui_X, Gui_Y, Gui_Dim, Gui_Dim, 0x00FF00FF);
+         Push_Rectangle(Renderer, Render_Layer_UI, Gui_X, Gui_Y, Gui_Dim, Gui_Dim, 0x00FF00FF);
       }
       else
       {
-         Draw_Rectangle(Backbuffer, Gui_X, Gui_Y, Gui_Dim, Gui_Dim, 0x004400FF);
-         Draw_Outline(Backbuffer, Gui_X, Gui_Y, Gui_Dim, Gui_Dim, 2*Border_Pixels, 0x00FF00FF);
+         Push_Rectangle(Renderer, Render_Layer_UI, Gui_X, Gui_Y, Gui_Dim, Gui_Dim, 0x004400FF);
+         Push_Outline(Renderer, Render_Layer_UI, Gui_X, Gui_Y, Gui_Dim, Gui_Dim, 2*Border_Pixels, 0x00FF00FF);
       }
       Gui_X += (2 * Gui_Dim);
    }
+
+   Render(Renderer);
 }
 
 MIX_SOUND(Mix_Sound)
 {
    game_state *Game_State = (game_state *)Memory.Base;
+
+   // NOTE: Audio_Output should get its own arena if we decide to handle sound
+   // mixing on a different thread.
+
+   arena Arena = Game_State->Scratch;
+   Audio_Output->Samples = Allocate(&Arena, s16, Audio_Output->Sample_Count*GAME_AUDIO_CHANNEL_COUNT);
 
    s16 *Destination = Audio_Output->Samples;
    for(int Sample_Index = 0; Sample_Index < Audio_Output->Sample_Count; ++Sample_Index)

@@ -17,7 +17,7 @@ typedef enum {
 #define GLYPH_COUNT 128
 typedef struct {
    float Scale;
-   game_texture Bitmaps[GLYPH_COUNT];
+   texture Bitmaps[GLYPH_COUNT];
 } text_glyphs;
 
 typedef struct {
@@ -57,7 +57,7 @@ static void Load_Font(text_font *Result, arena *Arena, arena Scratch, char *Path
             int Width, Height, Offset_X, Offset_Y;
             u8 *Bitmap = stbtt_GetCodepointBitmap(&Info, 0, Glyphs->Scale, Codepoint, &Width, &Height, &Offset_X, &Offset_Y);
 
-            game_texture *Glyph = Glyphs->Bitmaps + Codepoint;
+            texture *Glyph = Glyphs->Bitmaps + Codepoint;
             Glyph->Width    = Width;
             Glyph->Height   = Height;
             Glyph->Offset_X = Offset_X;
@@ -93,9 +93,9 @@ static void Load_Font(text_font *Result, arena *Arena, arena Scratch, char *Path
    }
 }
 
-static game_texture Load_Image(arena *Arena, char *Path)
+static texture Load_Image(arena *Arena, char *Path)
 {
-   game_texture Result = {0};
+   texture Result = {0};
    int Width, Height, Bytes_Per_Pixel;
 
    u8 *Data = stbi_load(Path, &Width, &Height, &Bytes_Per_Pixel, 0);

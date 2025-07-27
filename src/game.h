@@ -19,6 +19,8 @@ typedef struct {
    int Z;
 } int3;
 
+#include "render.h"
+
 typedef struct {
    size Length;
    u8 *Data;
@@ -108,15 +110,6 @@ typedef struct {
    size Size;
    u8 *Base;
 } game_memory;
-
-typedef struct {
-   int Width;
-   int Height;
-   u32 *Memory;
-
-   int Offset_X;
-   int Offset_Y;
-} game_texture;
 
 typedef struct {
    bool Pressed;
@@ -257,7 +250,7 @@ typedef struct {
 } work_queue;
 
 // Game API:
-#define UPDATE(Name) void Name(game_memory Memory, game_texture Backbuffer, game_input *Input, work_queue *Queue, float Frame_Seconds)
+#define UPDATE(Name) void Name(game_memory Memory, game_input *Input, renderer *Renderer, work_queue *Work_Queue, float Frame_Seconds)
 UPDATE(Update);
 
 #define MIX_SOUND(Name) void Name(game_memory Memory, game_audio_output *Audio_Output)
