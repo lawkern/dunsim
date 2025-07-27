@@ -2,12 +2,6 @@
 
 #include "game.h"
 
-#include "intrinsics.c"
-#include "math.c"
-#include "random.c"
-#include "assets.c"
-#include "map.c"
-
 typedef enum {
    Direction_None,
    Direction_Up,
@@ -24,10 +18,11 @@ typedef struct {
    float Offset_Y;
 } animation;
 
-typedef struct {
-   int X, Y, Z;
-} position;
-
+#include "intrinsics.c"
+#include "math.c"
+#include "random.c"
+#include "assets.c"
+#include "map.c"
 #include "entity.c"
 
 typedef enum {
@@ -318,23 +313,43 @@ static bool Can_Move(game_state *Game_State, entity *Entity, int Delta_X, int De
 {
    bool Result = true;
 
-   position P = Entity->Position;
-   rectangle Entity_Rect = To_Rectangle(P.X+Delta_X, P.Y+Delta_Y, Entity->Width, Entity->Height);
+   int3 Old_P = Entity->Position;
+   int3 New_P = Entity->Position;
+   New_P.X += Delta_X;
+   New_P.Y += Delta_Y;
 
-   // TODO: Handle cross-chunk boundaries.
-   map_chunk *Chunk = Query_Map_Chunk(&Game_State->Map, P.X, P.Y, P.Z);
-   for(map_chunk_entities *Entities = Chunk->Entities; Entities; Entities = Entities->Next)
+   // TODO: Handle diagonal cross-chunk boundaries.
+   map_chunk *Old_Chunk = Query_Map_Chunk(&Game_State->Map, Old_P.X, Old_P.Y, Old_P.Z);
+   map_chunk *New_Chunk = Query_Map_Chunk(&Game_State->Map, New_P.X, New_P.Y, New_P.Z);
+
+   if(!(Old_Chunk && New_Chunk))
    {
-      for(int Index = 0; Index < Entities->Index_Count; ++Index)
+      Result = false;
+   }
+   else
+   {
+      rectangle Entity_Rect = To_Rectangle(New_P.X, New_P.Y, Entity->Width, Entity->Height);
+
+      int Chunk_Count = (Old_Chunk == New_Chunk) ? 1 : 2;
+      map_chunk *Chunks[] = {Old_Chunk, New_Chunk};
+
+      for(int Chunk_Index = 0; Result && (Chunk_Index < Chunk_Count); ++Chunk_Index)
       {
-         entity *Test = Game_State->Entities + Entities->Indices[Index];
-         if(Test != Entity && Has_Collision(Test))
+         map_chunk *Chunk = Chunks[Chunk_Index];
+         for(map_chunk_entities *Entities = Chunk->Entities; Entities; Entities = Entities->Next)
          {
-            rectangle Test_Rect = To_Rectangle(Test->Position.X, Test->Position.Y, Test->Width, Test->Height);
-            if(Rectangles_Intersect(Entity_Rect, Test_Rect))
+            for(int Index = 0; Index < Entities->Index_Count; ++Index)
             {
-               Result = false;
-               break;
+               entity *Test = Game_State->Entities + Entities->Indices[Index];
+               if(Test != Entity && Has_Collision(Test))
+               {
+                  rectangle Test_Rect = To_Rectangle(Test->Position.X, Test->Position.Y, Test->Width, Test->Height);
+                  if(Rectangles_Intersect(Entity_Rect, Test_Rect))
+                  {
+                     Result = false;
+                     break;
+                  }
+               }
             }
          }
       }
@@ -349,12 +364,66 @@ static bool Is_Animating(animation *Animation)
    return(Result);
 }
 
+static void Update_Entity_Chunk(int Entity_Index, map_chunk *Old, map_chunk *New, arena *Arena)
+{
+   if(Old)
+   {
+      // TODO: We can probably do better than scanning the blocks linearly.
+      bool Removed = false;
+      for(map_chunk_entities *Entities = Old->Entities; !Removed && Entities; Entities = Entities->Next)
+      {
+         for(int Index = 0; Index < Entities->Index_Count; ++Index)
+         {
+            if(Entities->Indices[Index] == Entity_Index)
+            {
+               Entities->Indices[Index] = Entities->Indices[Entities->Index_Count - 1];
+               Entities->Index_Count--;
+
+               Removed = true;
+               break;
+            }
+         }
+      }
+      Assert(Removed);
+   }
+
+   map_chunk_entities *Entities = New->Entities;
+   if(!Entities || Entities->Index_Count == Array_Count(Entities->Indices))
+   {
+      map_chunk_entities *New_Entities = Allocate(Arena, map_chunk_entities, 1);
+      New_Entities->Next = Entities;
+      New->Entities = Entities = New_Entities;
+   }
+   Entities->Indices[Entities->Index_Count++] = Entity_Index;
+}
+
+static entity *Create_Entity(game_state *Game_State, entity_type Type, int Width, int Height, int X, int Y, int Z, u32 Flags)
+{
+   Assert(Game_State->Entity_Count != Array_Count(Game_State->Entities));
+   int Entity_Index = Game_State->Entity_Count++;
+
+   entity *Result = Game_State->Entities + Entity_Index;
+   Result->Type = Type;
+   Result->Width = Width;
+   Result->Height = Height;
+   Result->Position.X = X;
+   Result->Position.Y = Y;
+   Result->Position.Z = Z;
+   Result->Flags = Flags;
+
+   map *Map = &Game_State->Map;
+   map_chunk *Chunk = Insert_Map_Chunk(Map, X, Y, Z);
+   Update_Entity_Chunk(Entity_Index, 0, Chunk, &Map->Arena);
+
+   return(Result);
+}
+
 static bool Move(game_state *Game_State, entity *Entity, int Delta_X, int Delta_Y)
 {
    bool Ok = false;
 
    animation *Animation = &Entity->Animation;
-   position *Position = &Entity->Position;
+   int3 *Position = &Entity->Position;
 
    if(Delta_X && Delta_Y)
    {
@@ -403,8 +472,16 @@ static bool Move(game_state *Game_State, entity *Entity, int Delta_X, int Delta_
       Animation->Offset_X = (float)Delta_X;
       Animation->Offset_Y = (float)Delta_Y;
 
+      map_chunk *Old_Chunk = Query_Map_Chunk(&Game_State->Map, Position->X, Position->Y, Position->Z);
       Position->X += Delta_X;
       Position->Y += Delta_Y;
+      map_chunk *New_Chunk = Query_Map_Chunk(&Game_State->Map, Position->X, Position->Y, Position->Z);
+
+      if(Old_Chunk != New_Chunk)
+      {
+         int Entity_Index = Entity - Game_State->Entities;
+         Update_Entity_Chunk(Entity_Index, Old_Chunk, New_Chunk, &Game_State->Map.Arena);
+      }
    }
 
    return(Ok);
@@ -435,34 +512,6 @@ static void Advance_Animation(animation *Animation, float Frame_Seconds, float P
       Animation->Offset_Y += Delta;
       if(Animation->Offset_Y > 0) Animation->Offset_Y = 0;
    }
-}
-
-static entity *Create_Entity(game_state *Game_State, entity_type Type, int Width, int Height, int X, int Y, int Z, u32 Flags)
-{
-   Assert(Game_State->Entity_Count != Array_Count(Game_State->Entities));
-   int Entity_Index = Game_State->Entity_Count++;
-
-   entity *Result = Game_State->Entities + Entity_Index;
-   Result->Type = Type;
-   Result->Width = Width;
-   Result->Height = Height;
-   Result->Position.X = X;
-   Result->Position.Y = Y;
-   Result->Position.Z = Z;
-   Result->Flags = Flags;
-
-   map *Map = &Game_State->Map;
-   map_chunk *Chunk = Insert_Map_Chunk(Map, X, Y, Z);
-   map_chunk_entities *Entities = Chunk->Entities;
-   if(!Entities || Entities->Index_Count == Array_Count(Entities->Indices))
-   {
-      map_chunk_entities *New = Allocate(&Map->Arena, map_chunk_entities, 1);
-      New->Next = Entities;
-      Chunk->Entities = Entities = New;
-   }
-   Entities->Indices[Entities->Index_Count++] = Entity_Index;
-
-   return(Result);
 }
 
 static void Play_Sound(game_state *Game_State, game_sound *Sound, audio_playback Playback)
@@ -514,7 +563,7 @@ UPDATE(Update)
 
       Game_State->Entropy = Random_Seed(0x13);
 
-      position Origin = {8, 8, 0};
+      int3 Origin = {8, 8, 0};
       Game_State->Entity_Count++; // Skip null entity.
       for(int Player_Index = 0; Player_Index < GAME_CONTROLLER_COUNT; ++Player_Index)
       {
@@ -551,6 +600,11 @@ UPDATE(Update)
                   case 2: { // Wall
                      u32 Flags = Entity_Flag_Active|Entity_Flag_Visible|Entity_Flag_Collides;
                      Create_Entity(Game_State, Entity_Type_Wall, 1, 1, X+Offset_X, Y+Offset_Y, Z, Flags);
+                  } break;
+
+                  case 3: { // Stairs
+                     u32 Flags = Entity_Flag_Active|Entity_Flag_Visible;
+                     Create_Entity(Game_State, Entity_Type_Stairs, 2, 2, X+Offset_X, Y+Offset_Y, Z, Flags);
                   } break;
                }
             }
@@ -721,8 +775,10 @@ UPDATE(Update)
             } break;
 
             case Entity_Type_Camera: {
-               Entity->Position.X += Camera_Delta_X;
-               Entity->Position.Y += Camera_Delta_Y;
+               if(Camera_Delta_X || Camera_Delta_Y)
+               {
+                  Move(Game_State, Entity, Camera_Delta_X, Camera_Delta_Y);
+               }
             } break;
 
             case Entity_Type_Dragon: {
@@ -752,7 +808,8 @@ UPDATE(Update)
       }
    }
 
-   position Camera_Position = Game_State->Camera->Position;
+   int3 Camera_Position = Game_State->Camera->Position;
+   int3 Camera_Chunk_Position = Raw_To_Chunk_Position(Camera_Position.X, Camera_Position.Y, Camera_Position.Z);
 
    // Rendering
    u32 Palettes[2][4] = {
@@ -765,20 +822,15 @@ UPDATE(Update)
 
    // TODO: Loop over the surrounding chunks instead of tiles so that we don't
    // have to query for the chunk on each iteration.
-   int Min_X = Camera_Position.X - MAP_CHUNK_DIM*2;
-   int Max_X = Camera_Position.X + MAP_CHUNK_DIM*2;
-
-   int Min_Y = Camera_Position.Y - MAP_CHUNK_DIM*2;
-   int Max_Y = Camera_Position.Y + MAP_CHUNK_DIM*2;
 
    int Border_Pixels = Maximum(1, Tile_Pixels / 16);
 
    int Mouse_X_Pixel = Input->Mouse_X * (float)Backbuffer.Width;
    int Mouse_Y_Pixel = Input->Mouse_Y * (float)Backbuffer.Height;
 
-   for(int Chunk_Y = -1; Chunk_Y <= 1; ++Chunk_Y)
+   for(int Chunk_Y = Camera_Chunk_Position.Y-1; Chunk_Y <= Camera_Chunk_Position.Y+1; ++Chunk_Y)
    {
-      for(int Chunk_X = -1; Chunk_X <= 1; ++Chunk_X)
+      for(int Chunk_X = Camera_Chunk_Position.X-1; Chunk_X <= Camera_Chunk_Position.X+1; ++Chunk_X)
       {
          map_chunk *Chunk = Query_Map_Chunk_By_Chunk(Map, Chunk_X, Chunk_Y, Camera_Position.Z);
          if(Chunk)
@@ -842,18 +894,22 @@ UPDATE(Update)
                            Draw_Rectangle(Backbuffer, Nose_X, Nose_Y, Nose_Dim, Nose_Dim, 0xFFFF00FF);
                         } break;
 
+                        case Entity_Type_Floor: {
+                           Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Tile_Pixels, Tile_Pixels, Palette[0]);
+                           Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Tile_Pixels, Tile_Pixels, Border_Pixels, Palette[1]);
+                        } break;
+
                         case Entity_Type_Wall: {
-                           // int Tile = Get_Map_Position_Value(Map, Entity->Position.X, Entity->Position.Y, Entity->Position.Z);
-                           // if(Tile == 3)
-                           // {
-                           //    game_texture Bitmap = (Entity->Position.Z == 0) ? Game_State->Upstairs : Game_State->Downstairs;
-                           //    Draw_Bitmap(Backbuffer, Bitmap, Pixel_X, Pixel_Y);
-                           // }
-                           // else
-                           // {
                            Draw_Rectangle(Backbuffer, Pixel_X, Pixel_Y, Tile_Pixels, Tile_Pixels, Palette[2]);
-                           Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Tile_Pixels, Tile_Pixels, 1, Palette[1]);
-                           // }
+                           Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Tile_Pixels, Tile_Pixels, Border_Pixels, Palette[1]);
+                        } break;
+
+                        case Entity_Type_Stairs: {
+                           game_texture Bitmap = (Entity->Position.Z == 0) ? Game_State->Upstairs : Game_State->Downstairs;
+                           Draw_Bitmap(Backbuffer, Bitmap, Pixel_X, Pixel_Y);
+                           Draw_Bitmap(Backbuffer, Bitmap, Pixel_X+Tile_Pixels, Pixel_Y);
+                           Draw_Bitmap(Backbuffer, Bitmap, Pixel_X, Pixel_Y+Tile_Pixels);
+                           Draw_Bitmap(Backbuffer, Bitmap, Pixel_X+Tile_Pixels, Pixel_Y+Tile_Pixels);
                         } break;
 
                         default: {
@@ -882,14 +938,11 @@ UPDATE(Update)
    Text_Line(&Text, "Map: %zuMB", (Map->Arena.End - Map->Arena.Begin) / (1024 * 1024));
    Text_Line(&Text, "Scratch: %zuMB", (Scratch->End - Scratch->Begin) / (1024 * 1024));
    Text_Line(&Text, "Mouse: {%0.2f, %0.2f}", Input->Mouse_X, Input->Mouse_Y);
-   Text_Line(&Text, "");
-
-   Text_Line(&Text, "Entity Count: %d", Game_State->Entity_Count);
    if(Game_State->Selected_Debug_Entity)
    {
       entity *Selected = Game_State->Selected_Debug_Entity;
       string Name = Entity_Type_Names[Selected->Type];
-      Text_Line(&Text, "%.*s (SELECTED): {X:%d, Y:%d, Z:%d, W:%d, H:%d}",
+      Text_Line(&Text, "[SELECTED] %.*s: {X:%d, Y:%d, Z:%d, W:%d, H:%d}",
                              (int)Name.Length, Name.Data,
                              Selected->Position.X,
                              Selected->Position.Y,
@@ -898,25 +951,43 @@ UPDATE(Update)
                              Selected->Height);
    }
 
-   for(int Entity_Index = 0; Entity_Index < Game_State->Entity_Count; ++Entity_Index)
-   {
-      entity *Entity = Game_State->Entities + Entity_Index;
-      if(Is_Active(Entity))
-      {
-         switch(Entity->Type)
-         {
-            case Entity_Type_Camera:
-            case Entity_Type_Player:
-            case Entity_Type_Dragon:
-            {
-               string Name = Entity_Type_Names[Entity->Type];
-               Text_Line(&Text, "%.*s: {%d, %d, %d}", (int)Name.Length, Name.Data,
-                         Entity->Position.X, Entity->Position.Y, Entity->Position.Z);
-            } break;
+   Text_Line(&Text, "");
+   Text_Line(&Text, "Total Entities: %d", Game_State->Entity_Count);
 
-            default: {} break;
+   map_chunk *Chunk = Query_Map_Chunk(Map, Camera_Position.X, Camera_Position.Y, Camera_Position.Z);
+   for(map_chunk_entities *Entities = Chunk->Entities; Entities; Entities = Entities->Next)
+   {
+      for(int Index = 0; Index < Entities->Index_Count; ++Index)
+      {
+         int Entity_Index = Entities->Indices[Index];
+         entity *Entity = Game_State->Entities + Entity_Index;
+         if(Is_Active(Entity))
+         {
+            switch(Entity->Type)
+            {
+               case Entity_Type_Null:
+               case Entity_Type_Wall:
+               case Entity_Type_Floor: {
+               } break;
+
+               default: {
+                  string Name = Entity_Type_Names[Entity->Type];
+                  Text_Line(&Text, "[%d] %.*s: {%d, %d, %d}", Entity_Index, (int)Name.Length, Name.Data,
+                            Entity->Position.X, Entity->Position.Y, Entity->Position.Z);
+               } break;
+            }
          }
       }
+   }
+
+   Text_Line(&Text, "");
+   Text_Line(&Text, "Audio Tracks:");
+
+   int Track_Index = 0;
+   for(audio_track *Track = Game_State->Audio_Tracks; Track; Track = Track->Next)
+   {
+      Text_Line(&Text, "[%d] %d/%d samples %s", Track_Index++, Track->Sample_Index, Track->Sound->Sample_Count,
+                (Track->Playback == Audio_Playback_Loop) ? "(looping)" : "");
    }
 
    if(Game_State->Active_Textbox_Index)

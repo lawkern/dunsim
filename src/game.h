@@ -14,6 +14,10 @@ typedef uint64_t u64;
 typedef ptrdiff_t size;
 
 typedef struct {
+   int X, Y, Z;
+} int3;
+
+typedef struct {
    size Length;
    u8 *Data;
 } string;

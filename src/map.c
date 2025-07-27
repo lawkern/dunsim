@@ -28,10 +28,10 @@ typedef struct {
 } map;
 
 static int Debug_Map_Chunk[MAP_CHUNK_DIM][MAP_CHUNK_DIM] = {
-   {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2},
    {2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2},
-   {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 2, 2},
-   {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 2, 2},
+   {2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2},
+   {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 0, 2, 2},
+   {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 2, 2},
    {2, 2, 1, 1, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
    {2, 2, 1, 1, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
    {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
@@ -43,7 +43,7 @@ static int Debug_Map_Chunk[MAP_CHUNK_DIM][MAP_CHUNK_DIM] = {
    {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
    {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2},
    {2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2},
-   {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2},
+   {2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2},
 };
 
 static u64 Hash_Chunk_Coordinate(int Chunk_X, int Chunk_Y, int Chunk_Z)
@@ -120,13 +120,20 @@ static map_chunk *Get_Map_Chunk_By_Chunk(map *Map, int Chunk_X, int Chunk_Y, int
    return(Result);
 }
 
+static int3 Raw_To_Chunk_Position(int X, int Y, int Z)
+{
+   int3 Result = {0};
+   Result.X = (int)Floor((float)X / MAP_CHUNK_DIM);
+   Result.Y = (int)Floor((float)Y / MAP_CHUNK_DIM);
+   Result.Z = Z;
+
+   return(Result);
+}
+
 static map_chunk *Get_Map_Chunk(map *Map, int X, int Y, int Z, bool Insert_If_Not_Found)
 {
-   int Chunk_X = (int)Floor((float)X / MAP_CHUNK_DIM);
-   int Chunk_Y = (int)Floor((float)Y / MAP_CHUNK_DIM);
-   int Chunk_Z = Z;
-
-   map_chunk *Result = Get_Map_Chunk_By_Chunk(Map, Chunk_X, Chunk_Y, Chunk_Z, Insert_If_Not_Found);
+   int3 Chunk_P = Raw_To_Chunk_Position(X, Y, Z);
+   map_chunk *Result = Get_Map_Chunk_By_Chunk(Map, Chunk_P.X, Chunk_P.Y, Chunk_P.Z, Insert_If_Not_Found);
    return(Result);
 }
 

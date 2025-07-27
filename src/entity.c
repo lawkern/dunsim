@@ -35,7 +35,7 @@ typedef struct {
 
    int Width;
    int Height;
-   position Position;
+   int3 Position;
    animation Animation;
 } entity;
 

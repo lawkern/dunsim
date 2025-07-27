@@ -258,7 +258,7 @@ int main(void)
    int Input_Index = 0;
    game_input Inputs[16] = {0};
 
-#define AUDIO_FRAME_BUFFER_SAMPLE_COUNT 1024
+#define AUDIO_FRAME_BUFFER_SAMPLE_COUNT 2048
    game_audio_output Audio_Output = {0};
    size Audio_Output_Size = sizeof(*Audio_Output.Samples) * AUDIO_FRAME_BUFFER_SAMPLE_COUNT * GAME_AUDIO_CHANNEL_COUNT;
    Audio_Output.Samples = SDL_calloc(1, Audio_Output_Size);
