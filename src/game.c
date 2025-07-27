@@ -2,22 +2,6 @@
 
 #include "game.h"
 
-typedef enum {
-   Direction_None,
-   Direction_Up,
-   Direction_Down,
-   Direction_Left,
-   Direction_Right,
-
-   Direction_Count,
-} movement_direction;
-
-typedef struct {
-   movement_direction Direction;
-   float Offset_X;
-   float Offset_Y;
-} animation;
-
 #include "intrinsics.c"
 #include "math.c"
 #include "random.c"
@@ -62,9 +46,9 @@ typedef struct {
    int Entity_Count;
    entity Entities[1024*1024];
 
-   entity *Selected_Debug_Entity;
-   entity *Camera;
-   entity *Players[GAME_CONTROLLER_COUNT];
+   int Selected_Debug_Entity_ID;
+   int Camera_ID;
+   int Player_IDs[GAME_CONTROLLER_COUNT];
 
    audio_track *Audio_Tracks;
    audio_track *Free_Audio_Tracks;
@@ -358,12 +342,6 @@ static bool Can_Move(game_state *Game_State, entity *Entity, int Delta_X, int De
    return(Result);
 }
 
-static bool Is_Animating(animation *Animation)
-{
-   bool Result = (Animation->Offset_X != 0.0f || Animation->Offset_Y != 0.0f);
-   return(Result);
-}
-
 static void Update_Entity_Chunk(int Entity_Index, map_chunk *Old, map_chunk *New, arena *Arena)
 {
    if(Old)
@@ -397,24 +375,33 @@ static void Update_Entity_Chunk(int Entity_Index, map_chunk *Old, map_chunk *New
    Entities->Indices[Entities->Index_Count++] = Entity_Index;
 }
 
-static entity *Create_Entity(game_state *Game_State, entity_type Type, int Width, int Height, int X, int Y, int Z, u32 Flags)
+static int Create_Entity(game_state *Game_State, entity_type Type, int Width, int Height, int X, int Y, int Z, u32 Flags)
 {
    Assert(Game_State->Entity_Count != Array_Count(Game_State->Entities));
-   int Entity_Index = Game_State->Entity_Count++;
+   int ID = Game_State->Entity_Count++;
 
-   entity *Result = Game_State->Entities + Entity_Index;
-   Result->Type = Type;
-   Result->Width = Width;
-   Result->Height = Height;
-   Result->Position.X = X;
-   Result->Position.Y = Y;
-   Result->Position.Z = Z;
-   Result->Flags = Flags;
+   entity *Entity = Game_State->Entities + ID;
+   Entity->Type = Type;
+   Entity->Width = Width;
+   Entity->Height = Height;
+   Entity->Position.X = X;
+   Entity->Position.Y = Y;
+   Entity->Position.Z = Z;
+   Entity->Flags = Flags;
 
    map *Map = &Game_State->Map;
    map_chunk *Chunk = Insert_Map_Chunk(Map, X, Y, Z);
-   Update_Entity_Chunk(Entity_Index, 0, Chunk, &Map->Arena);
+   Update_Entity_Chunk(ID, 0, Chunk, &Map->Arena);
 
+   return(ID);
+}
+
+static entity *Get_Entity(game_state *Game_State, int ID)
+{
+   Assert(ID > 0);
+   Assert(ID < Array_Count(Game_State->Entities));
+
+   entity *Result = Game_State->Entities + ID;
    return(Result);
 }
 
@@ -479,8 +466,8 @@ static bool Move(game_state *Game_State, entity *Entity, int Delta_X, int Delta_
 
       if(Old_Chunk != New_Chunk)
       {
-         int Entity_Index = Entity - Game_State->Entities;
-         Update_Entity_Chunk(Entity_Index, Old_Chunk, New_Chunk, &Game_State->Map.Arena);
+         int ID = Entity - Game_State->Entities;
+         Update_Entity_Chunk(ID, Old_Chunk, New_Chunk, &Game_State->Map.Arena);
       }
    }
 
@@ -568,9 +555,9 @@ UPDATE(Update)
       for(int Player_Index = 0; Player_Index < GAME_CONTROLLER_COUNT; ++Player_Index)
       {
          u32 Flags = Entity_Flag_Visible|Entity_Flag_Collides;
-         Game_State->Players[Player_Index] = Create_Entity(Game_State, Entity_Type_Player, 2, 2, Origin.X, Origin.Y, Origin.Z, Flags);
+         Game_State->Player_IDs[Player_Index] = Create_Entity(Game_State, Entity_Type_Player, 2, 2, Origin.X, Origin.Y, Origin.Z, Flags);
       }
-      Game_State->Camera = Create_Entity(Game_State, Entity_Type_Camera, 0, 0, Origin.X, Origin.Y, Origin.Z, Entity_Flag_Active);
+      Game_State->Camera_ID = Create_Entity(Game_State, Entity_Type_Camera, 0, 0, Origin.X, Origin.Y, Origin.Z, Entity_Flag_Active);
 
       u32 Dragon_Flags = Entity_Flag_Active|Entity_Flag_Visible|Entity_Flag_Collides;
       Create_Entity(Game_State, Entity_Type_Dragon, 4, 4, 6, -8, Origin.Z, Dragon_Flags);
@@ -707,7 +694,7 @@ UPDATE(Update)
             Play_Sound(Game_State, &Game_State->Clap, Audio_Playback_Once);
          }
 
-         entity *Player = Game_State->Players[Controller_Index];
+         entity *Player = Get_Entity(Game_State, Game_State->Player_IDs[Controller_Index]);
          Controller->Connected ? Activate_Entity(Player) : Deactivate_Entity(Player);
 
          if(Was_Pressed(Controller->Action_Up))
@@ -748,18 +735,21 @@ UPDATE(Update)
       }
    }
 
+   entity *Camera = Get_Entity(Game_State, Game_State->Camera_ID);
+
    // Entity Update.
-   for(int Entity_Index = 0; Entity_Index < Game_State->Entity_Count; ++Entity_Index)
+   for(int Entity_Index = 1; Entity_Index < Game_State->Entity_Count; ++Entity_Index)
    {
-      entity *Entity = Game_State->Entities + Entity_Index;
+      entity *Entity = Get_Entity(Game_State, Entity_Index);
       if(Is_Active(Entity))
       {
          switch(Entity->Type)
          {
             case Entity_Type_Player: {
-               if(!Is_Animating(&Entity->Animation))
+               if(!Is_Animating(Entity))
                {
-                  int Player_Index = Entity - Game_State->Players[0];
+                  // NOTE: Assumes that players are stored contiguously.
+                  int Player_Index = Entity_Index - Game_State->Player_IDs[0];
                   int Delta_X = Player_Delta_Xs[Player_Index];
                   int Delta_Y = Player_Delta_Ys[Player_Index];
 
@@ -767,7 +757,7 @@ UPDATE(Update)
                   {
                      if(Move(Game_State, Entity, Delta_X, Delta_Y))
                      {
-                        Game_State->Camera->Position.Z = Entity->Position.Z;
+                        Camera->Position.Z = Entity->Position.Z;
                      }
                   }
                }
@@ -782,7 +772,7 @@ UPDATE(Update)
             } break;
 
             case Entity_Type_Dragon: {
-               if(!Is_Animating(&Entity->Animation))
+               if(!Is_Animating(Entity))
                {
                   int Delta_X = 0;
                   int Delta_Y = 0;
@@ -808,7 +798,7 @@ UPDATE(Update)
       }
    }
 
-   int3 Camera_Position = Game_State->Camera->Position;
+   int3 Camera_Position = Camera->Position;
    int3 Camera_Chunk_Position = Raw_To_Chunk_Position(Camera_Position.X, Camera_Position.Y, Camera_Position.Z);
 
    // Rendering
@@ -862,7 +852,7 @@ UPDATE(Update)
                         if(Mouse_X_Pixel >= Pixel_X && Mouse_X_Pixel < (Pixel_X + Pixel_Width) &&
                            Mouse_Y_Pixel >= Pixel_Y && Mouse_Y_Pixel < (Pixel_Y + Pixel_Height))
                         {
-                           Game_State->Selected_Debug_Entity = (Entity != Game_State->Selected_Debug_Entity) ? Entity : 0;
+                           Game_State->Selected_Debug_Entity_ID = (Entity_Index != Game_State->Selected_Debug_Entity_ID) ? Entity_Index : 0;
                         }
                      }
 
@@ -916,7 +906,7 @@ UPDATE(Update)
                         } break;
                      }
 
-                     if(Entity == Game_State->Selected_Debug_Entity)
+                     if(Entity_Index == Game_State->Selected_Debug_Entity_ID)
                      {
                         Draw_Outline(Backbuffer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 4*Border_Pixels, 0x00FF00FF);
                      }
@@ -938,9 +928,9 @@ UPDATE(Update)
    Text_Line(&Text, "Map: %zuMB", (Map->Arena.End - Map->Arena.Begin) / (1024 * 1024));
    Text_Line(&Text, "Scratch: %zuMB", (Scratch->End - Scratch->Begin) / (1024 * 1024));
    Text_Line(&Text, "Mouse: {%0.2f, %0.2f}", Input->Mouse_X, Input->Mouse_Y);
-   if(Game_State->Selected_Debug_Entity)
+   if(Game_State->Selected_Debug_Entity_ID)
    {
-      entity *Selected = Game_State->Selected_Debug_Entity;
+      entity *Selected = Get_Entity(Game_State, Game_State->Selected_Debug_Entity_ID);
       string Name = Entity_Type_Names[Selected->Type];
       Text_Line(&Text, "[SELECTED] %.*s: {X:%d, Y:%d, Z:%d, W:%d, H:%d}",
                              (int)Name.Length, Name.Data,

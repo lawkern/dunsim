@@ -29,6 +29,22 @@ typedef enum {
    Entity_Flag_Collides = 0x04,
 } entity_flag;
 
+typedef enum {
+   Direction_None,
+   Direction_Up,
+   Direction_Down,
+   Direction_Left,
+   Direction_Right,
+
+   Direction_Count,
+} movement_direction;
+
+typedef struct {
+   movement_direction Direction;
+   float Offset_X;
+   float Offset_Y;
+} animation;
+
 typedef struct {
    entity_type Type;
    u32 Flags;
@@ -69,4 +85,10 @@ static void Activate_Entity(entity *Entity)
 static void Deactivate_Entity(entity *Entity)
 {
    Entity->Flags &= ~(u32)Entity_Flag_Active;
+}
+
+static bool Is_Animating(entity *Entity)
+{
+   bool Result = (Entity->Animation.Offset_X != 0.0f || Entity->Animation.Offset_Y != 0.0f);
+   return(Result);
 }
