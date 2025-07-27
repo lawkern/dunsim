@@ -33,6 +33,17 @@ READ_ENTIRE_FILE(Read_Entire_File)
    return(Result);
 }
 
+WRITE_ENTIRE_FILE(Write_Entire_File)
+{
+   bool Result = SDL_SaveFile(Path, Memory, Size);
+   if(!Result)
+   {
+      SDL_Log("Failed to write file %s: %s", Path, SDL_GetError());
+   }
+
+   return(Result);
+}
+
 ENQUEUE_WORK(Enqueue_Work)
 {
    u32 New_Write_Index = (Queue->Write_Index + 1) % Array_Count(Queue->Entries);

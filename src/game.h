@@ -14,7 +14,9 @@ typedef uint64_t u64;
 typedef ptrdiff_t size;
 
 typedef struct {
-   int X, Y, Z;
+   int X;
+   int Y;
+   int Z;
 } int3;
 
 typedef struct {
@@ -267,6 +269,9 @@ LOG(Log);
 
 #define READ_ENTIRE_FILE(Name) string Name(arena *Arena, char *Path)
 READ_ENTIRE_FILE(Read_Entire_File);
+
+#define WRITE_ENTIRE_FILE(Name) bool Name(u8 *Memory, size Size, char *Path)
+WRITE_ENTIRE_FILE(Write_Entire_File);
 
 #define ENQUEUE_WORK(name) void name(work_queue *Queue, void *Data, work_queue_task *Task)
 ENQUEUE_WORK(Enqueue_Work);

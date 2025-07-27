@@ -548,6 +548,9 @@ UPDATE(Update)
 
       Assert(Scratch->Begin < Scratch->End);
 
+      string Test = S("This is a test file.");
+      Write_Entire_File(Test.Data, Test.Length, "data/test.txt");
+
       Game_State->Entropy = Random_Seed(0x13);
 
       int3 Origin = {8, 8, 0};
