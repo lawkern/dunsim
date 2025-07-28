@@ -243,8 +243,8 @@ int main(void)
 
    SDL_AudioSpec Audio_Spec = {0};
    Audio_Spec.format = SDL_AUDIO_S16;
-   Audio_Spec.channels = GAME_AUDIO_CHANNEL_COUNT;
-   Audio_Spec.freq = GAME_AUDIO_FREQUENCY;
+   Audio_Spec.channels = AUDIO_CHANNEL_COUNT;
+   Audio_Spec.freq = AUDIO_FREQUENCY;
 
    Sdl.Audio_Stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &Audio_Spec, 0, 0);
    if(!Sdl.Audio_Stream)
@@ -492,7 +492,7 @@ int main(void)
       Update(Memory, Input, &Renderer, &Work_Queue, Sdl.Actual_Frame_Seconds);
 
       // Fill audio.
-      size Bytes_Per_Sample = GAME_AUDIO_CHANNEL_COUNT * sizeof(*Audio_Output.Samples);
+      size Bytes_Per_Sample = AUDIO_CHANNEL_COUNT * sizeof(*Audio_Output.Samples);
       size Max_Audio_Output_Size = 2048 * Bytes_Per_Sample;
 
       int Bytes_Queued = SDL_GetAudioStreamQueued(Sdl.Audio_Stream);

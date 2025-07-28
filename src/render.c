@@ -4,11 +4,18 @@
 
 static render_command *Push_Command(renderer *Renderer, render_layer Layer, render_command_type Type)
 {
-   render_queue *Queue = Renderer->Queues[Layer];
-   Assert(Queue->Command_Count < Array_Count(Queue->Commands));
+   render_command *Command = 0;
 
-   render_command *Command = Queue->Commands + Queue->Command_Count++;
-   Command->Type = Type;
+   render_queue *Queue = Renderer->Queues[Layer];
+   if(Queue->Command_Count < Array_Count(Queue->Commands))
+   {
+      Command = Queue->Commands + Queue->Command_Count++;
+      Command->Type = Type;
+   }
+   else
+   {
+      Log("Ran out of render commands in layer %u.", Layer);
+   }
 
    return(Command);
 }
@@ -16,17 +23,23 @@ static render_command *Push_Command(renderer *Renderer, render_layer Layer, rend
 static void Push_Clear(renderer *Renderer, render_layer Layer, u32 Color)
 {
    render_command *Command = Push_Command(Renderer, Layer, Render_Command_Clear);
-   Command->Color = Color;
+   if(Command)
+   {
+      Command->Color = Color;
+   }
 }
 
 static void Push_Rectangle(renderer *Renderer, render_layer Layer, int X, int Y, int Width, int Height, u32 Color)
 {
    render_command *Command = Push_Command(Renderer, Layer, Render_Command_Rectangle);
-   Command->X = X;
-   Command->Y = Y;
-   Command->Width = Width;
-   Command->Height = Height;
-   Command->Color = Color;
+   if(Command)
+   {
+      Command->X = X;
+      Command->Y = Y;
+      Command->Width = Width;
+      Command->Height = Height;
+      Command->Color = Color;
+   }
 }
 
 static void Push_Outline(renderer *Renderer, render_layer Layer, int X, int Y, int Width, int Height, int Weight, u32 Color)
@@ -40,9 +53,36 @@ static void Push_Outline(renderer *Renderer, render_layer Layer, int X, int Y, i
 static void Push_Texture(renderer *Renderer, render_layer Layer, texture Texture, int X, int Y)
 {
    render_command *Command = Push_Command(Renderer, Layer, Render_Command_Texture);
-   Command->X = X;
-   Command->Y = Y;
-   Command->Texture = Texture;
+   if(Command)
+   {
+      Command->X = X;
+      Command->Y = Y;
+      Command->Texture = Texture;
+   }
+}
+
+static void Push_Text(renderer *Renderer, text_font *Font, text_size Size, int X, int Y, string Text)
+{
+   if(Font->Loaded)
+   {
+      text_glyphs *Glyphs = Font->Glyphs + Size;
+      float Scale = Glyphs->Scale;
+
+      for(size Index = 0; Index < Text.Length; ++Index)
+      {
+         int Codepoint = Text.Data[Index];
+
+         texture Glyph = Glyphs->Bitmaps[Codepoint];
+         Push_Texture(Renderer, Render_Layer_UI, Glyph, X, Y);
+
+         if(Index != Text.Length-1)
+         {
+            int Next_Codepoint = Text.Data[Index + 1];
+            int Pair_Index = (Codepoint * GLYPH_COUNT) + Next_Codepoint;
+            X += (Scale * Font->Distances[Pair_Index]);
+         }
+      }
+   }
 }
 
 // NOTE: Draw Calls.

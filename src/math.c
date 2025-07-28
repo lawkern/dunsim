@@ -2,7 +2,7 @@
 
 #include <math.h>
 
-#define TAU32 6.28318530718f
+#define TAU32 6.2831853f
 
 static float Sine(float Turns)
 {

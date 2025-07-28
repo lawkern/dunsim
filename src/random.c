@@ -3,13 +3,6 @@
 // NOTE: This pseudorandom number generation is based on the version described
 // at http://burtleburtle.net/bob/rand/smallprng.html
 
-typedef struct {
-   u64 A;
-   u64 B;
-   u64 C;
-   u64 D;
-} random_entropy;
-
 #define Rotate(X, K) (((X) << (K)) | ((X) >> (32 - (K))))
 static u64 Random_Value(random_entropy *Entropy)
 {

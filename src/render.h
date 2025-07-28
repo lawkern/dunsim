@@ -46,5 +46,7 @@ typedef enum {
 
 typedef struct {
    texture Backbuffer;
+   int Pixels_Per_Meter;
+
    render_queue *Queues[Render_Layer_Count];
 } renderer;

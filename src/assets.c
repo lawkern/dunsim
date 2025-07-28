@@ -6,31 +6,6 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-typedef enum {
-   Text_Size_Small,
-   Text_Size_Medium,
-   Text_Size_Large,
-
-   Text_Size_Count,
-} text_size;
-
-#define GLYPH_COUNT 128
-typedef struct {
-   float Scale;
-   texture Bitmaps[GLYPH_COUNT];
-} text_glyphs;
-
-typedef struct {
-   float Ascent;
-   float Descent;
-   float Line_Gap;
-
-   text_glyphs Glyphs[Text_Size_Count];
-   float *Distances;
-
-   bool Loaded;
-} text_font;
-
 static void Load_Font(text_font *Result, arena *Arena, arena Scratch, char *Path, int Pixel_Height)
 {
    string Font = Read_Entire_File(&Scratch, Path);
@@ -157,9 +132,9 @@ typedef struct {
 
 #define WAVE_FORMAT_PCM 0x0001
 
-static game_sound Load_Wave(arena *Arena, arena Scratch, char *Path)
+static audio_sound Load_Wave(arena *Arena, arena Scratch, char *Path)
 {
-   game_sound Result = {0};
+   audio_sound Result = {0};
 
    string File = Read_Entire_File(&Scratch, Path);
    Assert(File.Length);
@@ -186,8 +161,8 @@ static game_sound Load_Wave(arena *Arena, arena Scratch, char *Path)
             wave_format_chunk *Chunk = (wave_format_chunk *)At;
 
             Assert(Chunk->Format == WAVE_FORMAT_PCM);
-            Assert(Chunk->Samples_Per_Second == GAME_AUDIO_FREQUENCY);
-            Assert(Chunk->Channel_Count == GAME_AUDIO_CHANNEL_COUNT);
+            Assert(Chunk->Samples_Per_Second == AUDIO_FREQUENCY);
+            Assert(Chunk->Channel_Count == AUDIO_CHANNEL_COUNT);
             Assert((Chunk->Block_Align / Chunk->Channel_Count) == sizeof(*Result.Samples[0]));
 
             At += sizeof(*Header) + Header->Chunk_Size;
@@ -197,19 +172,19 @@ static game_sound Load_Wave(arena *Arena, arena Scratch, char *Path)
             wave_data_chunk *Chunk = (wave_data_chunk *)At;
             Header->Chunk_Size = (Header->Chunk_Size + 1) & ~1;
 
-            Result.Sample_Count = Header->Chunk_Size / (GAME_AUDIO_CHANNEL_COUNT * sizeof(*Result.Samples[0]));
+            Result.Sample_Count = Header->Chunk_Size / (AUDIO_CHANNEL_COUNT * sizeof(*Result.Samples[0]));
 
             s16 *Source = Chunk->Data;
-            s16 *Destination = Allocate(Arena, s16, Result.Sample_Count*GAME_AUDIO_CHANNEL_COUNT);
+            s16 *Destination = Allocate(Arena, s16, Result.Sample_Count*AUDIO_CHANNEL_COUNT);
 
-            for(int Channel_Index = 0; Channel_Index < GAME_AUDIO_CHANNEL_COUNT; ++Channel_Index)
+            for(int Channel_Index = 0; Channel_Index < AUDIO_CHANNEL_COUNT; ++Channel_Index)
             {
                Result.Samples[Channel_Index] = Destination + Channel_Index*Result.Sample_Count;
             }
 
             for(int Sample_Index = 0; Sample_Index < Result.Sample_Count; ++Sample_Index)
             {
-               for(int Channel_Index = 0; Channel_Index < GAME_AUDIO_CHANNEL_COUNT; ++Channel_Index)
+               for(int Channel_Index = 0; Channel_Index < AUDIO_CHANNEL_COUNT; ++Channel_Index)
                {
                   Result.Samples[Channel_Index][Sample_Index] = *Source++;
                }
