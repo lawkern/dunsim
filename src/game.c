@@ -50,6 +50,7 @@ typedef struct {
 #include "render.c"
 #include "audio.c"
 #include "debug.c"
+#include "renderer_software.c"
 
 static void Display_Textbox(game_state *Game_State, renderer *Renderer, string Text)
 {
