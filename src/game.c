@@ -123,6 +123,160 @@ static void Display_Textbox(game_state *Game_State, renderer *Renderer, string T
    }
 }
 
+static int Add_Camera(game_state *Game_State, int3 Position)
+{
+   u32 Flags = Entity_Flag_Active;
+   int Result = Create_Entity(Game_State, Entity_Type_Camera, Position, 0, 0, Flags);
+   return(Result);
+}
+
+static int Add_Floor(game_state *Game_State, int3 Position)
+{
+   u32 Flags = Entity_Flag_Active|Entity_Flag_Visible;
+   int Result = Create_Entity(Game_State, Entity_Type_Floor, Position, 1, 1, Flags);
+   return(Result);
+}
+
+static int Add_Wall(game_state *Game_State, int3 Position)
+{
+   u32 Flags = Entity_Flag_Active|Entity_Flag_Visible|Entity_Flag_Collides;
+   int Result = Create_Entity(Game_State, Entity_Type_Wall, Position, 1, 1, Flags);
+   return(Result);
+}
+
+static int Add_Stairs(game_state *Game_State, int3 Position)
+{
+   u32 Flags = Entity_Flag_Active|Entity_Flag_Visible;
+   int Result = Create_Entity(Game_State, Entity_Type_Stairs, Position, 2, 2, Flags);
+   return(Result);
+}
+
+static int Add_Player(game_state *Game_State, int3 Position)
+{
+   u32 Flags = Entity_Flag_Visible|Entity_Flag_Collides;
+   int Result = Create_Entity(Game_State, Entity_Type_Player, Position, 2, 2, Flags);
+   return(Result);
+}
+
+static int Add_Creature(game_state *Game_State, entity_type Type, int3 Position, int Width, int Height)
+{
+   u32 Flags = Entity_Flag_Active|Entity_Flag_Visible|Entity_Flag_Collides;
+   int Result = Create_Entity(Game_State, Type, Position, Width, Height, Flags);
+   return(Result);
+}
+
+static void Create_Debug_Room(game_state *Game_State)
+{
+   map *Map = &Game_State->Map;
+
+   int Min_X = -12;
+   int Max_X = 12;
+
+   int Min_Y = -8;
+   int Max_Y = 8;
+
+   for(int Z = 0; Z <= 1; ++Z)
+   {
+      for(int Y = Min_Y; Y <= Max_Y; ++Y)
+      {
+         for(int X = Min_X; X <= Max_X; ++X)
+         {
+            if(Y >= (Min_Y + 1) && Y <= (Min_Y + 2) &&
+               X >= (Max_X - 2) && X <= (Max_X - 1))
+            {
+               if(Y == (Min_Y + 1) && X == (Max_X - 2))
+               {
+                  Add_Stairs(Game_State, Int3(X, Y, Z));
+               }
+            }
+            else if(Y == Min_Y || Y == Max_Y || X == Min_X || X == Max_X)
+            {
+               Add_Wall(Game_State, Int3(X, Y, Z));
+            }
+            else
+            {
+               Add_Floor(Game_State, Int3(X, Y, Z));
+            }
+         }
+      }
+   }
+
+#if 0
+   int Chunk_X = 0;
+   int Chunk_Y = 0;
+   int Chunk_Z = 0;
+   direction Direction_Towards_Previous_Room = Direction_None;
+   for(int Chunk_Index = 0; Chunk_Index < 10; ++Chunk_Index)
+   {
+      int X = Chunk_X * MAP_CHUNK_DIM;
+      int Y = Chunk_Y * MAP_CHUNK_DIM;
+      int Z = Chunk_Z;
+
+      map_chunk *Chunk = Insert_Map_Chunk(Map, X, Y, Z);
+      for(int Offset_Y = 0; Offset_Y < MAP_CHUNK_DIM; ++Offset_Y)
+      {
+         for(int Offset_X = 0; Offset_X < MAP_CHUNK_DIM; ++Offset_X)
+         {
+            switch(Debug_Map_Chunk[Offset_Y][Offset_X])
+            {
+               case 1: { // Floor
+                  u32 Flags = Entity_Flag_Active|Entity_Flag_Visible;
+                  Create_Entity(Game_State, Entity_Type_Floor, 1, 1, X+Offset_X, Y+Offset_Y, Z, Flags);
+               } break;
+
+               case 2: { // Wall
+                  u32 Flags = Entity_Flag_Active|Entity_Flag_Visible|Entity_Flag_Collides;
+                  Create_Entity(Game_State, Entity_Type_Wall, 1, 1, X+Offset_X, Y+Offset_Y, Z, Flags);
+               } break;
+
+               case 3: { // Stairs
+                  u32 Flags = Entity_Flag_Active|Entity_Flag_Visible;
+                  Create_Entity(Game_State, Entity_Type_Stairs, 2, 2, X+Offset_X, Y+Offset_Y, Z, Flags);
+               } break;
+            }
+         }
+      }
+
+      direction Direction = Direction_Towards_Previous_Room;
+      while(Direction == Direction_Towards_Previous_Room)
+      {
+         Direction = Random_Range(&Game_State->Entropy, Direction_None, Direction_Count-1);
+      }
+
+      switch(Direction)
+      {
+         case Direction_Up: {
+            Chunk_Y -= 1;
+            Direction_Towards_Previous_Room = Direction_Down;
+         } break;
+
+         case Direction_Down: {
+            Chunk_Y += 1;
+            Direction_Towards_Previous_Room = Direction_Up;
+         } break;
+
+         case Direction_Left: {
+            Chunk_X -= 1;
+            Direction_Towards_Previous_Room = Direction_Right;
+         } break;
+
+         case Direction_Right: {
+            Chunk_X += 1;
+            Direction_Towards_Previous_Room = Direction_Left;
+         } break;
+
+         case Direction_None: {
+            Chunk_Z = (Chunk_Z) ? 0 : 1;
+         } break;
+
+         default: {
+            Assert(0);
+         } break;
+      }
+   }
+#endif
+}
+
 UPDATE(Update)
 {
    game_state *Game_State = (game_state *)Memory.Base;
@@ -158,98 +312,22 @@ UPDATE(Update)
          Renderer->Queues[Queue_Index] = Allocate(Permanent, render_queue, 1);
       }
 
-      // Initialize audio.
-
-      string Test = S("This is a test file.");
-      Write_Entire_File(Test.Data, Test.Length, "data/test.txt");
-
+      // Initialize entropy.
       Game_State->Entropy = Random_Seed(0x13);
 
-      int3 Origin = {8, 8, 0};
+      // Initialize entities.
+      int3 Origin = {0, 0, 0};
       Game_State->Entity_Count++; // Skip null entity.
+      Game_State->Camera_ID = Add_Camera(Game_State, Origin);
       for(int Player_Index = 0; Player_Index < GAME_CONTROLLER_COUNT; ++Player_Index)
       {
-         u32 Flags = Entity_Flag_Visible|Entity_Flag_Collides;
-         Game_State->Player_IDs[Player_Index] = Create_Entity(Game_State, Entity_Type_Player, 2, 2, Origin.X, Origin.Y, Origin.Z, Flags);
+         Game_State->Player_IDs[Player_Index] = Add_Player(Game_State, Origin);
       }
-      Game_State->Camera_ID = Create_Entity(Game_State, Entity_Type_Camera, 0, 0, Origin.X, Origin.Y, Origin.Z, Entity_Flag_Active);
+      Add_Creature(Game_State, Entity_Type_Dragon, Int3(6, 0, Origin.Z), 4, 4);
 
-      u32 Dragon_Flags = Entity_Flag_Active|Entity_Flag_Visible|Entity_Flag_Collides;
-      Create_Entity(Game_State, Entity_Type_Dragon, 4, 4, 6, -8, Origin.Z, Dragon_Flags);
+      Create_Debug_Room(Game_State);
 
-      int Chunk_X = 0;
-      int Chunk_Y = 0;
-      int Chunk_Z = 0;
-      direction Direction_Towards_Previous_Room = Direction_None;
-      for(int Chunk_Index = 0; Chunk_Index < 10; ++Chunk_Index)
-      {
-         int X = Chunk_X * MAP_CHUNK_DIM;
-         int Y = Chunk_Y * MAP_CHUNK_DIM;
-         int Z = Chunk_Z;
-
-         map_chunk *Chunk = Insert_Map_Chunk(Map, X, Y, Z);
-         for(int Offset_Y = 0; Offset_Y < MAP_CHUNK_DIM; ++Offset_Y)
-         {
-            for(int Offset_X = 0; Offset_X < MAP_CHUNK_DIM; ++Offset_X)
-            {
-               switch(Debug_Map_Chunk[Offset_Y][Offset_X])
-               {
-                  case 1: { // Floor
-                     u32 Flags = Entity_Flag_Active|Entity_Flag_Visible;
-                     Create_Entity(Game_State, Entity_Type_Floor, 1, 1, X+Offset_X, Y+Offset_Y, Z, Flags);
-                  } break;
-
-                  case 2: { // Wall
-                     u32 Flags = Entity_Flag_Active|Entity_Flag_Visible|Entity_Flag_Collides;
-                     Create_Entity(Game_State, Entity_Type_Wall, 1, 1, X+Offset_X, Y+Offset_Y, Z, Flags);
-                  } break;
-
-                  case 3: { // Stairs
-                     u32 Flags = Entity_Flag_Active|Entity_Flag_Visible;
-                     Create_Entity(Game_State, Entity_Type_Stairs, 2, 2, X+Offset_X, Y+Offset_Y, Z, Flags);
-                  } break;
-               }
-            }
-         }
-
-         direction Direction = Direction_Towards_Previous_Room;
-         while(Direction == Direction_Towards_Previous_Room)
-         {
-            Direction = Random_Range(Entropy, Direction_None, Direction_Count-1);
-         }
-
-         switch(Direction)
-         {
-            case Direction_Up: {
-               Chunk_Y -= 1;
-               Direction_Towards_Previous_Room = Direction_Down;
-            } break;
-
-            case Direction_Down: {
-               Chunk_Y += 1;
-               Direction_Towards_Previous_Room = Direction_Up;
-            } break;
-
-            case Direction_Left: {
-               Chunk_X -= 1;
-               Direction_Towards_Previous_Room = Direction_Right;
-            } break;
-
-            case Direction_Right: {
-               Chunk_X += 1;
-               Direction_Towards_Previous_Room = Direction_Left;
-            } break;
-
-            case Direction_None: {
-               Chunk_Z = (Chunk_Z) ? 0 : 1;
-            } break;
-
-            default: {
-               Assert(0);
-            } break;
-         }
-      }
-
+      // Initialize assets.
       Load_Font(&Game_State->Varia_Font, Permanent, *Scratch, "data/Inter.ttf", Renderer->Pixels_Per_Meter);
       Load_Font(&Game_State->Fixed_Font, Permanent, *Scratch, "data/JetBrainsMono.ttf", Renderer->Pixels_Per_Meter);
       if(!Game_State->Varia_Font.Loaded)
@@ -442,11 +520,12 @@ UPDATE(Update)
    int Mouse_X_Pixel = Input->Mouse_X * (float)Backbuffer_Width;
    int Mouse_Y_Pixel = Input->Mouse_Y * (float)Backbuffer_Height;
 
+   int Chunk_Z = Camera_Position.Z;
    for(int Chunk_Y = Camera_Chunk_Position.Y-1; Chunk_Y <= Camera_Chunk_Position.Y+1; ++Chunk_Y)
    {
       for(int Chunk_X = Camera_Chunk_Position.X-1; Chunk_X <= Camera_Chunk_Position.X+1; ++Chunk_X)
       {
-         map_chunk *Chunk = Get_Map_Chunk_By_Chunk_Position(Map, Chunk_X, Chunk_Y, Camera_Position.Z);
+         map_chunk *Chunk = Get_Map_Chunk_By_Chunk_Position(Map, Chunk_X, Chunk_Y, Chunk_Z);
          if(Chunk)
          {
             for(map_chunk_entities *Entities = Chunk->Entities; Entities; Entities = Entities->Next)
@@ -515,7 +594,7 @@ UPDATE(Update)
                         } break;
 
                         case Entity_Type_Wall: {
-                           render_layer Layer = Render_Layer_Background;
+                           render_layer Layer = Render_Layer_Foreground;
                            Push_Rectangle(Renderer, Layer, Pixel_X, Pixel_Y, Pixels_Per_Meter, Pixels_Per_Meter, Palette[2]);
                            Push_Outline(Renderer, Layer, Pixel_X, Pixel_Y, Pixels_Per_Meter, Pixels_Per_Meter, Border_Pixels, Palette[1]);
                         } break;
@@ -540,6 +619,16 @@ UPDATE(Update)
                      }
                   }
                }
+            }
+
+            if(Game_State->Debug_Overlay)
+            {
+               // NOTE: Highlight chunk boundaries.
+               int3 Position = Chunk_To_Raw_Position(Chunk_X, Chunk_Y, Chunk_Z);
+               int Pixel_X = Pixels_Per_Meter * (Position.X - Camera_Position.X) + Backbuffer_Width/2;
+               int Pixel_Y = Pixels_Per_Meter * (Position.Y - Camera_Position.Y) + Backbuffer_Height/2;
+               int Pixel_Dim = Pixels_Per_Meter * MAP_CHUNK_DIM;
+               Push_Outline(Renderer, Render_Layer_Foreground, Pixel_X, Pixel_Y, Pixel_Dim, Pixel_Dim, Border_Pixels, 0xFF00FFFF);
             }
          }
       }

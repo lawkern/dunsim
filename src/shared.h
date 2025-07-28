@@ -19,6 +19,12 @@ typedef struct {
    int Z;
 } int3;
 
+static inline int3 Int3(int X, int Y, int Z)
+{
+   int3 Result = {X, Y, Z};
+   return(Result);
+}
+
 typedef struct {
    size Length;
    u8 *Data;

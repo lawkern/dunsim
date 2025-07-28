@@ -48,3 +48,12 @@ static bool Rectangles_Intersect(rectangle A, rectangle B)
 
    return(Result);
 }
+
+static bool Rectangle_Contains(rectangle Outer, rectangle Inner)
+{
+   bool Result = (Inner.Min_X >= Outer.Min_X &&
+                  Inner.Min_Y >= Outer.Min_Y &&
+                  Inner.Max_X <= Outer.Max_X &&
+                  Inner.Max_Y <= Outer.Max_Y);
+   return(Result);
+}

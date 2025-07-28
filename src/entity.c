@@ -85,7 +85,7 @@ static void Update_Entity_Chunk(int Entity_Index, map_chunk *Old, map_chunk *New
    }
 }
 
-static int Create_Entity(game_state *Game_State, entity_type Type, int Width, int Height, int X, int Y, int Z, u32 Flags)
+static int Create_Entity(game_state *Game_State, entity_type Type, int3 Position, int Width, int Height, u32 Flags)
 {
    Assert(Game_State->Entity_Count != Array_Count(Game_State->Entities));
    int ID = Game_State->Entity_Count++;
@@ -94,13 +94,11 @@ static int Create_Entity(game_state *Game_State, entity_type Type, int Width, in
    Entity->Type = Type;
    Entity->Width = Width;
    Entity->Height = Height;
-   Entity->Position.X = X;
-   Entity->Position.Y = Y;
-   Entity->Position.Z = Z;
+   Entity->Position = Position;
    Entity->Flags = Flags;
 
    map *Map = &Game_State->Map;
-   map_chunk *Chunk = Insert_Map_Chunk(Map, X, Y, Z);
+   map_chunk *Chunk = Insert_Map_Chunk(Map, Position.X, Position.Y, Position.Z);
    Update_Entity_Chunk(ID, 0, Chunk, &Map->Arena);
 
    return(ID);
@@ -112,6 +110,12 @@ static entity *Get_Entity(game_state *Game_State, int ID)
    Assert(ID < Array_Count(Game_State->Entities));
 
    entity *Result = Game_State->Entities + ID;
+   return(Result);
+}
+
+static rectangle Get_Entity_Bounds(entity *Entity)
+{
+   rectangle Result = To_Rectangle(Entity->Position.X, Entity->Position.Y, Entity->Width, Entity->Height);
    return(Result);
 }
 
@@ -153,20 +157,20 @@ static movement_result Can_Move(game_state *Game_State, entity *Entity, int Delt
                entity *Test = Game_State->Entities + Entities->Indices[Index];
                if(Test != Entity)
                {
-                  bool Stairs = (Test->Type == Entity_Type_Stairs);
-                  if(Has_Collision(Test) || Stairs)
+                  rectangle Test_Rect = Get_Entity_Bounds(Test);
+                  if(Test->Type == Entity_Type_Stairs)
                   {
-                     rectangle Test_Rect = To_Rectangle(Test->Position.X, Test->Position.Y, Test->Width, Test->Height);
+                     if(Rectangle_Contains(Test_Rect, Entity_Rect))
+                     {
+                        Result.Position.Z = (Result.Position.Z) ? 0 : 1;
+                        break;
+                     }
+                  }
+                  else if(Has_Collision(Test))
+                  {
                      if(Rectangles_Intersect(Entity_Rect, Test_Rect))
                      {
-                        if(Stairs)
-                        {
-                           Result.Position.Z = (Result.Position.Z) ? 0 : 1;
-                        }
-                        else
-                        {
-                           Result.Ok = false;
-                        }
+                        Result.Ok = false;
                         break;
                      }
                   }

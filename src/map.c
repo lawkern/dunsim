@@ -103,6 +103,16 @@ static int3 Raw_To_Chunk_Position(int X, int Y, int Z)
    return(Result);
 }
 
+static int3 Chunk_To_Raw_Position(int X, int Y, int Z)
+{
+   int3 Result = {0};
+   Result.X = X * MAP_CHUNK_DIM;
+   Result.Y = Y * MAP_CHUNK_DIM;
+   Result.Z = Z;
+
+   return(Result);
+}
+
 static map_chunk *Get_Map_Chunk_(map *Map, int X, int Y, int Z, bool Insert_If_Not_Found)
 {
    int3 Chunk_P = Raw_To_Chunk_Position(X, Y, Z);

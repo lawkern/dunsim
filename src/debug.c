@@ -48,7 +48,7 @@ static text_context Begin_Text(renderer *Renderer, int X, int Y, text_font *Font
    return(Result);
 }
 
-static void Text_Line(text_context *Text, char *Format, ...)
+static void Debug_Text_Line(text_context *Text, char *Format, ...)
 {
    Advance_Text_Line(Text->Font, Text->Size, &Text->Y);
 
@@ -66,24 +66,24 @@ static void Text_Line(text_context *Text, char *Format, ...)
 
 static void Display_Debug_Overlay(game_state *Game_State, game_input *Input, renderer *Renderer, float Frame_Seconds)
 {
-   int X = Renderer->Pixels_Per_Meter / 2;
-   int Y = 0;
+   int Start_X = Renderer->Pixels_Per_Meter / 2;
+   int Start_Y = 0;
 
-   text_context Text = Begin_Text(Renderer, X, Y, &Game_State->Varia_Font, Text_Size_Large);
-   Text_Line(&Text, "Dungeon Simulator");
+   text_context Text = Begin_Text(Renderer, Start_X, Start_Y, &Game_State->Varia_Font, Text_Size_Large);
+   Debug_Text_Line(&Text, "Dungeon Simulator");
 
    Text.Font = &Game_State->Fixed_Font;
    Text.Size = Text_Size_Medium;
-   Text_Line(&Text, "Frame Time: %3.3fms", Frame_Seconds*1000.0f);
-   Text_Line(&Text, "Permanent: %zuMB", (Game_State->Permanent.End - Game_State->Permanent.Begin) / Megabytes(1));
-   Text_Line(&Text, "Map: %zuMB", (Game_State->Map.Arena.End - Game_State->Map.Arena.Begin) / Megabytes(1));
-   Text_Line(&Text, "Scratch: %zuMB", (Game_State->Scratch.End - Game_State->Scratch.Begin) / Megabytes(1));
-   Text_Line(&Text, "Mouse: {%0.2f, %0.2f}", Input->Mouse_X, Input->Mouse_Y);
+   Debug_Text_Line(&Text, "Frame Time: %3.3fms", Frame_Seconds*1000.0f);
+   Debug_Text_Line(&Text, "Permanent: %zuMB", (Game_State->Permanent.End - Game_State->Permanent.Begin) / Megabytes(1));
+   Debug_Text_Line(&Text, "Map: %zuMB", (Game_State->Map.Arena.End - Game_State->Map.Arena.Begin) / Megabytes(1));
+   Debug_Text_Line(&Text, "Scratch: %zuMB", (Game_State->Scratch.End - Game_State->Scratch.Begin) / Megabytes(1));
+   Debug_Text_Line(&Text, "Mouse: {%0.2f, %0.2f}", Input->Mouse_X, Input->Mouse_Y);
    if(Game_State->Selected_Debug_Entity_ID)
    {
       entity *Selected = Get_Entity(Game_State, Game_State->Selected_Debug_Entity_ID);
       string Name = Entity_Type_Names[Selected->Type];
-      Text_Line(&Text, "[SELECTED] %.*s: {X:%d, Y:%d, Z:%d, W:%d, H:%d}",
+      Debug_Text_Line(&Text, "[SELECTED] %.*s: {X:%d, Y:%d, Z:%d, W:%d, H:%d}",
                              (int)Name.Length, Name.Data,
                              Selected->Position.X,
                              Selected->Position.Y,
@@ -92,8 +92,8 @@ static void Display_Debug_Overlay(game_state *Game_State, game_input *Input, ren
                              Selected->Height);
    }
 
-   Text_Line(&Text, "");
-   Text_Line(&Text, "Total Entities: %d", Game_State->Entity_Count);
+   Debug_Text_Line(&Text, "");
+   Debug_Text_Line(&Text, "Total Entities: %d", Game_State->Entity_Count);
 
    entity *Camera = Get_Entity(Game_State, Game_State->Camera_ID);
    map_chunk *Chunk = Get_Map_Chunk(&Game_State->Map, Camera->Position.X, Camera->Position.Y, Camera->Position.Z);
@@ -116,7 +116,7 @@ static void Display_Debug_Overlay(game_state *Game_State, game_input *Input, ren
 
                   default: {
                      string Name = Entity_Type_Names[Entity->Type];
-                     Text_Line(&Text, "[%d] %.*s: {%d, %d, %d}", Entity_Index, (int)Name.Length, Name.Data,
+                     Debug_Text_Line(&Text, "[%d] %.*s: {%d, %d, %d}", Entity_Index, (int)Name.Length, Name.Data,
                                Entity->Position.X, Entity->Position.Y, Entity->Position.Z);
                   } break;
                }
@@ -125,14 +125,14 @@ static void Display_Debug_Overlay(game_state *Game_State, game_input *Input, ren
       }
    }
 
-   Text_Line(&Text, "");
-   Text_Line(&Text, "Audio Tracks:");
+   Debug_Text_Line(&Text, "");
+   Debug_Text_Line(&Text, "Audio Tracks:");
 
    int Track_Index = 0;
    for(audio_track *Track = Game_State->Audio_Tracks; Track; Track = Track->Next)
    {
-      Text_Line(&Text, "[%d] %d/%d samples %s", Track_Index++, Track->Sample_Index, Track->Sound->Sample_Count,
-                (Track->Playback == Audio_Playback_Loop) ? "(looping)" : "");
+      Debug_Text_Line(&Text, "[%d] %d samples left %s", Track_Index++, Track->Sound->Sample_Count - Track->Sample_Index,
+                      (Track->Playback == Audio_Playback_Loop) ? "(looping)" : "");
    }
 
    int Gui_Dim = Renderer->Pixels_Per_Meter;
