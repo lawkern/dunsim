@@ -503,7 +503,7 @@ int main(void)
       else if(Bytes_Queued < Max_Audio_Output_Size)
       {
          Audio_Output.Sample_Count = Max_Audio_Output_Size / Bytes_Per_Sample;
-         Mix_Sound(Memory, &Audio_Output);
+         Mix_Audio_Output(Memory, &Audio_Output);
 
          if(!SDL_PutAudioStreamData(Sdl.Audio_Stream, Audio_Output.Samples, Max_Audio_Output_Size))
          {

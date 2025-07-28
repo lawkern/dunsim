@@ -139,8 +139,8 @@ typedef struct {
 #define UPDATE(Name) void Name(game_memory Memory, game_input *Input, renderer *Renderer, work_queue *Work_Queue, float Frame_Seconds)
 UPDATE(Update);
 
-#define MIX_SOUND(Name) void Name(game_memory Memory, game_audio_output *Audio_Output)
-MIX_SOUND(Mix_Sound);
+#define MIX_AUDIO_OUTPUT(Name) void Name(game_memory Memory, game_audio_output *Audio_Output)
+MIX_AUDIO_OUTPUT(Mix_Audio_Output);
 
 // Platform API:
 #define LOG(Name) void Name(char *Format, ...)

@@ -21,4 +21,5 @@ struct audio_track
 
    int Sample_Index;
    audio_playback Playback;
+   float Volume[AUDIO_CHANNEL_COUNT];
 };

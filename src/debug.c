@@ -131,8 +131,11 @@ static void Display_Debug_Overlay(game_state *Game_State, game_input *Input, ren
    int Track_Index = 0;
    for(audio_track *Track = Game_State->Audio_Tracks; Track; Track = Track->Next)
    {
-      Debug_Text_Line(&Text, "[%d] %d samples left %s", Track_Index++, Track->Sound->Sample_Count - Track->Sample_Index,
-                      (Track->Playback == Audio_Playback_Loop) ? "(looping)" : "");
+      Assert(Array_Count(Track->Volume) == 2);
+      Debug_Text_Line(&Text, "[%d] %d samples left, Vol: [%0.1f %0.1f] %s", Track_Index++,
+                      Track->Volume[0], Track->Volume[1],
+                      Track->Sound->Sample_Count - Track->Sample_Index,
+                      (Track->Playback == Audio_Playback_Loop) ? "(loop)" : "");
    }
 
    int Gui_Dim = Renderer->Pixels_Per_Meter;
