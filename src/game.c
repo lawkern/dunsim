@@ -63,20 +63,22 @@ static void Display_Textbox(game_state *Game_State, renderer *Renderer, string T
       float Scale = Glyphs->Scale;
       float Line_Advance = Scale * (Font->Ascent - Font->Descent + Font->Line_Gap);
 
-      int Margin = 10;
-      int Padding = 25;
+      float Margin = 10.0f;
+      float Padding = 25.0f;
+      float Backbuffer_Width = (float)Renderer->Backbuffer.Width;
+      float Backbuffer_Height = (float)Renderer->Backbuffer.Height;
 
       int Line_Count = 1;
       int Max_Line_Count = 6;
 
-      int Box_Width = Renderer->Backbuffer.Width - 2*Margin;
-      int Box_Height = Max_Line_Count*Line_Advance + 2*Padding;
-      int Box_X = Margin;
-      int Box_Y = Renderer->Backbuffer.Height - Margin - Box_Height;
+      float Box_Width = Backbuffer_Width - 2*Margin;
+      float Box_Height = (float)Max_Line_Count*Line_Advance + 2*Padding;
+      float Box_X = Margin;
+      float Box_Y = Backbuffer_Height - Margin - Box_Height;
       Push_Rectangle(Renderer, Render_Layer_UI, Box_X, Box_Y, Box_Width, Box_Height, 0x000000FF);
 
-      int Text_X = Margin + Padding;
-      int Text_Y = Box_Y + Padding + Scale*Font->Ascent;
+      float Text_X = Margin + Padding;
+      float Text_Y = Box_Y + Padding + Scale*Font->Ascent;
 
       cut Words = {0};
       Words.After = Text;
@@ -85,7 +87,7 @@ static void Display_Textbox(game_state *Game_State, renderer *Renderer, string T
          Words = Cut(Words.After, ' ');
          string Word = Words.Before;
 
-         int Width = Get_Text_Width(Font, Size, Word);
+         float Width = Get_Text_Width(Font, Size, Word);
          if((Box_X + Box_Width - Padding) < (Text_X + Width))
          {
             Text_X = Margin + Padding;
@@ -510,16 +512,16 @@ UPDATE(Update)
    };
    u32 *Palette = Palettes[Camera_Position.Z];
 
-   Push_Clear(Renderer, Render_Layer_Background, Palette[0]);
+   Push_Clear(Renderer, Palette[0]);
 
    // TODO: Loop over the surrounding chunks instead of tiles so that we don't
    // have to query for the chunk on each iteration.
 
-   int Pixels_Per_Meter = Renderer->Pixels_Per_Meter;
-   int Border_Pixels = Maximum(1, Pixels_Per_Meter / 16);
+   float Pixels_Per_Meter = Renderer->Pixels_Per_Meter;
+   float Border_Pixels = Maximum(1.0f, Pixels_Per_Meter / 16.0f);
 
-   int Mouse_X_Pixel = Input->Mouse_X * (float)Backbuffer_Width;
-   int Mouse_Y_Pixel = Input->Mouse_Y * (float)Backbuffer_Height;
+   float Mouse_X_Pixel = Input->Mouse_X * (float)Backbuffer_Width;
+   float Mouse_Y_Pixel = Input->Mouse_Y * (float)Backbuffer_Height;
 
    int Chunk_Z = Camera_Position.Z;
    for(int Chunk_Y = Camera_Chunk_Position.Y-1; Chunk_Y <= Camera_Chunk_Position.Y+1; ++Chunk_Y)
@@ -538,18 +540,18 @@ UPDATE(Update)
                   entity *Entity = Game_State->Entities + Entity_Index;
                   if(Is_Visible(Entity) && Entity->Position.Z == Camera_Position.Z)
                   {
-                     int Pixel_Width  = Entity->Width * Pixels_Per_Meter;
-                     int Pixel_Height = Entity->Height * Pixels_Per_Meter;
+                     float Pixel_Width  = (float)Entity->Width * Pixels_Per_Meter;
+                     float Pixel_Height = (float)Entity->Height * Pixels_Per_Meter;
 #if 1
-                     int Offset_X = Pixels_Per_Meter * Entity->Animation.Offset_X;
-                     int Offset_Y = Pixels_Per_Meter * Entity->Animation.Offset_Y;
+                     float Offset_X = Pixels_Per_Meter * Entity->Animation.Offset_X;
+                     float Offset_Y = Pixels_Per_Meter * Entity->Animation.Offset_Y;
 #else
-                     int Offset_X = 0;
-                     int Offset_Y = 0;
+                     float Offset_X = 0;
+                     float Offset_Y = 0;
 #endif
 
-                     int Pixel_X = Pixels_Per_Meter * (Entity->Position.X - Camera_Position.X) + Backbuffer_Width/2 - Offset_X;
-                     int Pixel_Y = Pixels_Per_Meter * (Entity->Position.Y - Camera_Position.Y) + Backbuffer_Height/2 - Offset_Y;
+                     float Pixel_X = Pixels_Per_Meter * (float)(Entity->Position.X - Camera_Position.X) + Backbuffer_Width/2.0f - Offset_X;
+                     float Pixel_Y = Pixels_Per_Meter * (float)(Entity->Position.Y - Camera_Position.Y) + Backbuffer_Height/2.0f - Offset_Y;
 
                      if(Was_Pressed(Input->Mouse_Button_Left))
                      {
@@ -560,9 +562,9 @@ UPDATE(Update)
                         }
                      }
 
-                     int Nose_Dim = 4 * Border_Pixels;
-                     int Nose_X = Pixel_X + Pixel_Width/2  - Nose_Dim/2;
-                     int Nose_Y = Pixel_Y + Pixel_Height/2 - Nose_Dim/2;
+                     float Nose_Dim = 4 * Border_Pixels;
+                     float Nose_X = Pixel_X + Pixel_Width/2  - Nose_Dim/2;
+                     float Nose_Y = Pixel_Y + Pixel_Height/2 - Nose_Dim/2;
                      switch(Entity->Animation.Direction)
                      {
                         case Direction_Up:    { Nose_Y -= (Pixel_Height/2 - Nose_Dim/2); } break;
@@ -622,15 +624,17 @@ UPDATE(Update)
                }
             }
 
+#if 0
             if(Game_State->Debug_Overlay)
             {
                // NOTE: Highlight chunk boundaries.
                int3 Position = Chunk_To_Raw_Position(Chunk_X, Chunk_Y, Chunk_Z);
-               int Pixel_X = Pixels_Per_Meter * (Position.X - Camera_Position.X) + Backbuffer_Width/2;
-               int Pixel_Y = Pixels_Per_Meter * (Position.Y - Camera_Position.Y) + Backbuffer_Height/2;
-               int Pixel_Dim = Pixels_Per_Meter * MAP_CHUNK_DIM;
+               float Pixel_X = Pixels_Per_Meter * (float)(Position.X - Camera_Position.X) + Backbuffer_Width/2.0f;
+               float Pixel_Y = Pixels_Per_Meter * (float)(Position.Y - Camera_Position.Y) + Backbuffer_Height/2.0f;
+               float Pixel_Dim = Pixels_Per_Meter * MAP_CHUNK_DIM;
                Push_Outline(Renderer, Render_Layer_Foreground, Pixel_X, Pixel_Y, Pixel_Dim, Pixel_Dim, Border_Pixels, Palette[2]);
             }
+#endif
          }
       }
    }

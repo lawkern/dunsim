@@ -5,8 +5,8 @@ typedef struct {
    int Height;
    u32 *Memory;
 
-   int Offset_X;
-   int Offset_Y;
+   float Offset_X;
+   float Offset_Y;
 } texture;
 
 typedef enum {
@@ -17,8 +17,8 @@ typedef enum {
 
 typedef struct {
    render_command_type Type;
-   int X;
-   int Y;
+   float X;
+   float Y;
    union
    {
       texture Texture;
@@ -46,7 +46,7 @@ typedef enum {
 
 typedef struct {
    texture Backbuffer;
-   int Pixels_Per_Meter;
+   float Pixels_Per_Meter;
 
    render_queue *Queues[Render_Layer_Count];
 } renderer;
@@ -55,7 +55,7 @@ typedef struct {
 #define DRAW_CLEAR(Name) void Name(texture Destination, u32 Color)
 static DRAW_CLEAR(Draw_Clear);
 
-#define DRAW_RECTANGLE(Name) void Name(texture Destination, int X, int Y, int Width, int Height, u32 Color)
+#define DRAW_RECTANGLE(Name) void Name(texture Destination, float X, float Y, float Width, float Height, u32 Color)
 static DRAW_RECTANGLE(Draw_Rectangle);
 
 #define DRAW_TEXTURE(Name) void Name(texture Destination, texture Source, float X, float Y)

@@ -22,16 +22,16 @@ static render_command *Push_Command(renderer *Renderer, render_layer Layer, rend
    return(Command);
 }
 
-static void Push_Clear(renderer *Renderer, render_layer Layer, u32 Color)
+static void Push_Clear(renderer *Renderer, u32 Color)
 {
-   render_command *Command = Push_Command(Renderer, Layer, Render_Command_Clear);
+   render_command *Command = Push_Command(Renderer, Render_Layer_Background, Render_Command_Clear);
    if(Command)
    {
       Command->Color = Color;
    }
 }
 
-static void Push_Rectangle(renderer *Renderer, render_layer Layer, int X, int Y, int Width, int Height, u32 Color)
+static void Push_Rectangle(renderer *Renderer, render_layer Layer, float X, float Y, float Width, float Height, u32 Color)
 {
    render_command *Command = Push_Command(Renderer, Layer, Render_Command_Rectangle);
    if(Command)
@@ -44,7 +44,7 @@ static void Push_Rectangle(renderer *Renderer, render_layer Layer, int X, int Y,
    }
 }
 
-static void Push_Outline(renderer *Renderer, render_layer Layer, int X, int Y, int Width, int Height, int Weight, u32 Color)
+static void Push_Outline(renderer *Renderer, render_layer Layer, float X, float Y, float Width, float Height, float Weight, u32 Color)
 {
    Push_Rectangle(Renderer, Layer, X, Y, Width-Weight, Weight, Color); // Top
    Push_Rectangle(Renderer, Layer, X+Weight, Y+Height-Weight, Width-Weight, Weight, Color); // Bottom
@@ -52,7 +52,7 @@ static void Push_Outline(renderer *Renderer, render_layer Layer, int X, int Y, i
    Push_Rectangle(Renderer, Layer, X+Width-Weight, Y, Weight, Height-Weight, Color); // Right
 }
 
-static void Push_Texture(renderer *Renderer, render_layer Layer, texture Texture, int X, int Y)
+static void Push_Texture(renderer *Renderer, render_layer Layer, texture Texture, float X, float Y)
 {
    render_command *Command = Push_Command(Renderer, Layer, Render_Command_Texture);
    if(Command)
@@ -63,7 +63,7 @@ static void Push_Texture(renderer *Renderer, render_layer Layer, texture Texture
    }
 }
 
-static void Push_Text(renderer *Renderer, text_font *Font, text_size Size, int X, int Y, string Text)
+static void Push_Text(renderer *Renderer, text_font *Font, text_size Size, float X, float Y, string Text)
 {
    if(Font->Loaded)
    {

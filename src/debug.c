@@ -1,6 +1,6 @@
 /* (c) copyright 2025 Lawrence D. Kern /////////////////////////////////////// */
 
-static void Advance_Text_Line(text_font *Font, text_size Size, int *Y)
+static void Advance_Text_Line(text_font *Font, text_size Size, float *Y)
 {
    float Scale = Font->Glyphs[Size].Scale;
 
@@ -8,9 +8,9 @@ static void Advance_Text_Line(text_font *Font, text_size Size, int *Y)
    *Y += Line_Advance;
 }
 
-static int Get_Text_Width(text_font *Font, text_size Size, string Text)
+static float Get_Text_Width(text_font *Font, text_size Size, string Text)
 {
-   int Result = 0;
+   float Result = 0;
 
    float Scale = Font->Glyphs[Size].Scale;
    for(size Index = 0; Index < Text.Length; ++Index)
@@ -29,8 +29,8 @@ static int Get_Text_Width(text_font *Font, text_size Size, string Text)
 
 typedef struct {
    renderer *Renderer;
-   int X;
-   int Y;
+   float X;
+   float Y;
 
    text_font *Font;
    text_size Size;

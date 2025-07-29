@@ -13,10 +13,11 @@ static DRAW_CLEAR(Draw_Clear)
 
 static DRAW_RECTANGLE(Draw_Rectangle)
 {
-   int Min_X = Maximum(X, 0);
-   int Min_Y = Maximum(Y, 0);
-   int Max_X = Minimum(Destination.Width, X + Width);
-   int Max_Y = Minimum(Destination.Height, Y + Height);
+   // TODO: Subpixel precision?
+   int Min_X = (int)(Maximum(X, 0.0f) + 0.5f);
+   int Min_Y = (int)(Maximum(Y, 0.0f) + 0.5f);
+   int Max_X = (int)(Minimum((float)Destination.Width, X + Width) + 0.5f);
+   int Max_Y = (int)(Minimum((float)Destination.Height, Y + Height) + 0.5f);
 
    for(int Y = Min_Y; Y < Max_Y; ++Y)
    {
@@ -32,10 +33,11 @@ static DRAW_TEXTURE(Draw_Texture)
    X += Source.Offset_X;
    Y += Source.Offset_Y;
 
-   int Min_X = Maximum(X, 0);
-   int Min_Y = Maximum(Y, 0);
-   int Max_X = Minimum(Destination.Width, X + Source.Width);
-   int Max_Y = Minimum(Destination.Height, Y + Source.Height);
+   // TODO: Subpixel precision.
+   int Min_X = (int)(Maximum(X, 0.0f) + 0.5f);
+   int Min_Y = (int)(Maximum(Y, 0.0f) + 0.5f);
+   int Max_X = (int)(Minimum((float)Destination.Width, X + (float)Source.Width) + 0.5f);
+   int Max_Y = (int)(Minimum((float)Destination.Height, Y + (float)Source.Height) + 0.5f);
 
    int Clip_X_Offset = Min_X - X;
    int Clip_Y_Offset = Min_Y - Y;
