@@ -108,7 +108,7 @@ static void Display_Textbox(game_state *Game_State, renderer *Renderer, string T
             else
             {
                texture Glyph = Glyphs->Bitmaps[Codepoint];
-               Push_Texture(Renderer, Render_Layer_UI, Glyph, Text_X, Text_Y);
+               Push_Texture(Renderer, Render_Layer_UI, Glyph, Text_X, Text_Y, Glyph.Width, Glyph.Height);
 
                int Next_Codepoint = (Index != Word.Length-1) ? Word.Data[Index + 1] : ' ';
                int Pair_Index = (Codepoint * GLYPH_COUNT) + Next_Codepoint;
@@ -291,8 +291,11 @@ UPDATE(Update)
    random_entropy *Entropy = &Game_State->Entropy;
    map *Map = &Game_State->Map;
 
-   int Backbuffer_Width = Renderer->Backbuffer.Width;
-   int Backbuffer_Height = Renderer->Backbuffer.Height;
+   float Backbuffer_Width = (float)Renderer->Backbuffer.Width;
+   float Backbuffer_Height = (float)Renderer->Backbuffer.Height;
+
+   float Screen_Width_Meters = 40.0f;
+   float Screen_Height_Meters = (Backbuffer_Height / Backbuffer_Width) * Screen_Width_Meters;
 
    if(!Permanent->Begin)
    {
@@ -515,14 +518,8 @@ UPDATE(Update)
 
    Push_Clear(Renderer, Palette[0]);
 
-   // TODO: Loop over the surrounding chunks instead of tiles so that we don't
-   // have to query for the chunk on each iteration.
-
-   float Pixels_Per_Meter = Renderer->Pixels_Per_Meter;
-   float Border_Pixels = Maximum(1.0f, Pixels_Per_Meter / 16.0f);
-
-   float Mouse_X_Pixel = Input->Mouse_X * (float)Backbuffer_Width;
-   float Mouse_Y_Pixel = Input->Mouse_Y * (float)Backbuffer_Height;
+   float Mouse_X = Input->Mouse_X * Screen_Width_Meters;
+   float Mouse_Y = Input->Mouse_Y * Screen_Height_Meters;
 
    int Chunk_Z = Camera_Position.Z;
    for(int Chunk_Y = Camera_Chunk_Position.Y-1; Chunk_Y <= Camera_Chunk_Position.Y+1; ++Chunk_Y)
@@ -541,37 +538,33 @@ UPDATE(Update)
                   entity *Entity = Game_State->Entities + Entity_Index;
                   if(Is_Visible(Entity) && Entity->Position.Z == Camera_Position.Z)
                   {
-                     float Pixel_Width  = (float)Entity->Width * Pixels_Per_Meter;
-                     float Pixel_Height = (float)Entity->Height * Pixels_Per_Meter;
-#if 1
-                     float Offset_X = Pixels_Per_Meter * Entity->Animation.Offset_X;
-                     float Offset_Y = Pixels_Per_Meter * Entity->Animation.Offset_Y;
-#else
-                     float Offset_X = 0;
-                     float Offset_Y = 0;
-#endif
+                     float Width = Entity->Width;
+                     float Height = Entity->Height;
+                     float Half_Width = 0.5f * Width;
+                     float Half_Height = 0.5f * Height;
 
-                     float Pixel_X = Pixels_Per_Meter * (float)(Entity->Position.X - Camera_Position.X) + Backbuffer_Width/2.0f - Offset_X;
-                     float Pixel_Y = Pixels_Per_Meter * (float)(Entity->Position.Y - Camera_Position.Y) + Backbuffer_Height/2.0f - Offset_Y;
+                     float X = (float)(Entity->Position.X - Camera_Position.X) - Entity->Animation.Offset_X;
+                     float Y = (float)(Entity->Position.Y - Camera_Position.Y) - Entity->Animation.Offset_Y;
 
                      if(Was_Pressed(Input->Mouse_Button_Left))
                      {
-                        if(Mouse_X_Pixel >= Pixel_X && Mouse_X_Pixel < (Pixel_X + Pixel_Width) &&
-                           Mouse_Y_Pixel >= Pixel_Y && Mouse_Y_Pixel < (Pixel_Y + Pixel_Height))
+                        if(Mouse_X >= X && Mouse_X < (X + Width) &&
+                           Mouse_Y >= Y && Mouse_Y < (Y + Height))
                         {
                            Game_State->Selected_Debug_Entity_ID = (Entity_Index != Game_State->Selected_Debug_Entity_ID) ? Entity_Index : 0;
                         }
                      }
 
-                     float Nose_Dim = 4 * Border_Pixels;
-                     float Nose_X = Pixel_X + Pixel_Width/2  - Nose_Dim/2;
-                     float Nose_Y = Pixel_Y + Pixel_Height/2 - Nose_Dim/2;
+                     float Nose_Dim = 0.2f;
+                     float Nose_Half_Dim = 0.5f * Nose_Dim;
+                     float Nose_X = X + Half_Width  - Nose_Half_Dim;
+                     float Nose_Y = Y + Half_Height - Nose_Half_Dim;
                      switch(Entity->Animation.Direction)
                      {
-                        case Direction_Up:    { Nose_Y -= (Pixel_Height/2 - Nose_Dim/2); } break;
-                        case Direction_Down:  { Nose_Y += (Pixel_Height/2 - Nose_Dim/2); } break;
-                        case Direction_Left:  { Nose_X -= (Pixel_Width/2  - Nose_Dim/2); } break;
-                        case Direction_Right: { Nose_X += (Pixel_Width/2  - Nose_Dim/2); } break;
+                        case Direction_Up:    { Nose_Y -= (Half_Height - Nose_Half_Dim); } break;
+                        case Direction_Down:  { Nose_Y += (Half_Height - Nose_Half_Dim); } break;
+                        case Direction_Left:  { Nose_X -= (Half_Width  - Nose_Half_Dim); } break;
+                        case Direction_Right: { Nose_X += (Half_Width  - Nose_Half_Dim); } break;
                         default: {} break;
                      }
 
@@ -579,38 +572,34 @@ UPDATE(Update)
                      {
                         case Entity_Type_Player: {
                            render_layer Layer = Render_Layer_Foreground;
-                           Push_Rectangle(Renderer, Layer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 0x000088FF);
-                           Push_Outline(Renderer, Layer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 4*Border_Pixels, 0xFFFFFFFF);
+                           Push_Rectangle(Renderer, Layer, X, Y, Width, Height, 0x000088FF);
+                           Push_Outline(Renderer, Layer, X, Y, Width, Height, 0.1f, 0xFFFFFFFF);
                            Push_Rectangle(Renderer, Layer, Nose_X, Nose_Y, Nose_Dim, Nose_Dim, 0x0000FFFF);
                         } break;
 
                         case Entity_Type_Dragon: {
                            render_layer Layer = Render_Layer_Foreground;
-                           Push_Rectangle(Renderer, Layer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 0x880000FF);
-                           Push_Outline(Renderer, Layer, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 4*Border_Pixels, 0xFF0000FF);
+                           Push_Rectangle(Renderer, Layer, X, Y, Width, Height, 0x880000FF);
+                           Push_Outline(Renderer, Layer, X, Y, Width, Height, 0.2f, 0xFF0000FF);
                            Push_Rectangle(Renderer, Layer, Nose_X, Nose_Y, Nose_Dim, Nose_Dim, 0xFFFF00FF);
                         } break;
 
                         case Entity_Type_Floor: {
                            render_layer Layer = Render_Layer_Background;
-                           Push_Rectangle(Renderer, Layer, Pixel_X, Pixel_Y, Pixels_Per_Meter, Pixels_Per_Meter, Palette[0]);
-                           Push_Outline(Renderer, Layer, Pixel_X, Pixel_Y, Pixels_Per_Meter, Pixels_Per_Meter, Border_Pixels, Palette[1]);
+                           Push_Rectangle(Renderer, Layer, X, Y, Width, Height, Palette[0]);
+                           Push_Outline(Renderer, Layer, X, Y, Width, Height, 0.05f, Palette[1]);
                         } break;
 
                         case Entity_Type_Wall: {
                            render_layer Layer = Render_Layer_Foreground;
-                           Push_Rectangle(Renderer, Layer, Pixel_X, Pixel_Y, Pixels_Per_Meter, Pixels_Per_Meter, Palette[2]);
-                           Push_Outline(Renderer, Layer, Pixel_X, Pixel_Y, Pixels_Per_Meter, Pixels_Per_Meter, Border_Pixels, Palette[1]);
+                           Push_Rectangle(Renderer, Layer, X, Y, Width, Height, Palette[2]);
+                           Push_Outline(Renderer, Layer, X, Y, Width, Height, 0.05f, Palette[1]);
                         } break;
 
                         case Entity_Type_Stairs: {
                            render_layer Layer = Render_Layer_Background;
                            texture Texture = (Entity->Position.Z == 0) ? Game_State->Upstairs : Game_State->Downstairs;
-
-                           Push_Texture(Renderer, Layer, Texture, Pixel_X, Pixel_Y);
-                           Push_Texture(Renderer, Layer, Texture, Pixel_X+Pixels_Per_Meter, Pixel_Y);
-                           Push_Texture(Renderer, Layer, Texture, Pixel_X, Pixel_Y+Pixels_Per_Meter);
-                           Push_Texture(Renderer, Layer, Texture, Pixel_X+Pixels_Per_Meter, Pixel_Y+Pixels_Per_Meter);
+                           Push_Texture(Renderer, Layer, Texture, X, Y, Width, Height);
                         } break;
 
                         default: {
@@ -619,21 +608,20 @@ UPDATE(Update)
 
                      if(Entity_Index == Game_State->Selected_Debug_Entity_ID)
                      {
-                        Push_Outline(Renderer, Render_Layer_UI, Pixel_X, Pixel_Y, Pixel_Width, Pixel_Height, 4*Border_Pixels, 0x00FF00FF);
+                        Push_Outline(Renderer, Render_Layer_UI, X, Y, Width, Height, 0.2f, 0x00FF00FF);
                      }
                   }
                }
             }
-
 #if 0
             if(Game_State->Debug_Overlay)
             {
                // NOTE: Highlight chunk boundaries.
                int3 Position = Chunk_To_Raw_Position(Chunk_X, Chunk_Y, Chunk_Z);
-               float Pixel_X = Pixels_Per_Meter * (float)(Position.X - Camera_Position.X) + Backbuffer_Width/2.0f;
-               float Pixel_Y = Pixels_Per_Meter * (float)(Position.Y - Camera_Position.Y) + Backbuffer_Height/2.0f;
-               float Pixel_Dim = Pixels_Per_Meter * MAP_CHUNK_DIM;
-               Push_Outline(Renderer, Render_Layer_Foreground, Pixel_X, Pixel_Y, Pixel_Dim, Pixel_Dim, Border_Pixels, Palette[2]);
+               float X = (float)(Position.X - Camera_Position.X);
+               float Y = (float)(Position.Y - Camera_Position.Y);
+               float Dim = MAP_CHUNK_DIM;
+               Push_Outline(Renderer, Render_Layer_Foreground, X, Y, Dim, Dim, 0.05f, Palette[2]);
             }
 #endif
          }

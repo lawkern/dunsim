@@ -36,10 +36,14 @@ static void Push_Rectangle(renderer *Renderer, render_layer Layer, float X, floa
    render_command *Command = Push_Command(Renderer, Layer, Render_Command_Rectangle);
    if(Command)
    {
-      Command->X = X;
-      Command->Y = Y;
-      Command->Width = Width;
-      Command->Height = Height;
+      float Pixels_Per_Meter = Renderer->Pixels_Per_Meter;
+      float Screen_Center_X = Renderer->Backbuffer.Width * 0.5f;
+      float Screen_Center_Y = Renderer->Backbuffer.Height * 0.5f;
+
+      Command->X = (X * Pixels_Per_Meter) + Screen_Center_X;
+      Command->Y = (Y * Pixels_Per_Meter) + Screen_Center_Y;
+      Command->Width = Width * Pixels_Per_Meter;
+      Command->Height = Height * Pixels_Per_Meter;
       Command->Color = Color;
    }
 }
@@ -52,14 +56,20 @@ static void Push_Outline(renderer *Renderer, render_layer Layer, float X, float 
    Push_Rectangle(Renderer, Layer, X+Width-Weight, Y, Weight, Height-Weight, Color); // Right
 }
 
-static void Push_Texture(renderer *Renderer, render_layer Layer, texture Texture, float X, float Y)
+static void Push_Texture(renderer *Renderer, render_layer Layer, texture Texture, float X, float Y, float Width, float Height)
 {
    render_command *Command = Push_Command(Renderer, Layer, Render_Command_Texture);
    if(Command)
    {
-      Command->X = X;
-      Command->Y = Y;
+      float Pixels_Per_Meter = Renderer->Pixels_Per_Meter;
+      float Screen_Center_X = Renderer->Backbuffer.Width * 0.5f;
+      float Screen_Center_Y = Renderer->Backbuffer.Height * 0.5f;
+
       Command->Texture = Texture;
+      Command->X = (X * Pixels_Per_Meter) + Screen_Center_X;
+      Command->Y = (Y * Pixels_Per_Meter) + Screen_Center_Y;
+      Command->Width = Width * Pixels_Per_Meter;
+      Command->Height = Height * Pixels_Per_Meter;
    }
 }
 
@@ -75,7 +85,16 @@ static void Push_Text(renderer *Renderer, text_font *Font, text_size Size, float
          int Codepoint = Text.Data[Index];
 
          texture Glyph = Glyphs->Bitmaps[Codepoint];
-         Push_Texture(Renderer, Render_Layer_UI, Glyph, X, Y);
+
+         render_command *Command = Push_Command(Renderer, Render_Layer_UI, Render_Command_Texture);
+         if(Command)
+         {
+            Command->Texture = Glyph;
+            Command->X = X;
+            Command->Y = Y;
+            Command->Width = Glyph.Width;
+            Command->Height = Glyph.Height;
+         }
 
          if(Index != Text.Length-1)
          {
@@ -90,6 +109,10 @@ static void Push_Text(renderer *Renderer, text_font *Font, text_size Size, float
 static void Render(renderer *Renderer)
 {
    texture Backbuffer = Renderer->Backbuffer;
+   float Pixels_Per_Meter = Renderer->Pixels_Per_Meter;
+   float Screen_Center_X = (float)Backbuffer.Width * 0.5f;
+   float Screen_Center_Y = (float)Backbuffer.Height * 0.5f;
+
    for(int Queue_Index = 0; Queue_Index < Array_Count(Renderer->Queues); ++Queue_Index)
    {
       render_queue *Queue = Renderer->Queues[Queue_Index];
@@ -107,7 +130,7 @@ static void Render(renderer *Renderer)
             } break;
 
             case Render_Command_Texture: {
-               Draw_Texture(Backbuffer, Command->Texture, Command->X, Command->Y);
+               Draw_Texture(Backbuffer, Command->Texture, Command->X, Command->Y, Command->Width, Command->Height);
             } break;
          }
       }

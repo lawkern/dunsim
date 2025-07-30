@@ -19,15 +19,12 @@ typedef struct {
    render_command_type Type;
    float X;
    float Y;
+   float Width;
+   float Height;
    union
    {
       texture Texture;
-      struct
-      {
-         int Width;
-         int Height;
-         u32 Color;
-      };
+      u32 Color;
    };
 } render_command;
 
@@ -58,5 +55,5 @@ static DRAW_CLEAR(Draw_Clear);
 #define DRAW_RECTANGLE(Name) void Name(texture Destination, float X, float Y, float Width, float Height, u32 Color)
 static DRAW_RECTANGLE(Draw_Rectangle);
 
-#define DRAW_TEXTURE(Name) void Name(texture Destination, texture Source, float X, float Y)
+#define DRAW_TEXTURE(Name) void Name(texture Destination, texture Source, float X, float Y, float Width, float Height)
 static DRAW_TEXTURE(Draw_Texture);
