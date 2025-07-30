@@ -483,8 +483,8 @@ int main(void)
 
       float Raw_Mouse_X, Raw_Mouse_Y;
       SDL_GetMouseState(&Raw_Mouse_X, &Raw_Mouse_Y);
-      Input->Mouse_X = (Raw_Mouse_X - Dst_Rect.x) / Dst_Rect.w;
-      Input->Mouse_Y = (Raw_Mouse_Y - Dst_Rect.y) / Dst_Rect.h;
+      Input->Normalized_Mouse_X = (2.0f * (Raw_Mouse_X - Dst_Rect.x) / Dst_Rect.w) - 1.0f;
+      Input->Normalized_Mouse_Y = (2.0f * (Raw_Mouse_Y - Dst_Rect.y) / Dst_Rect.h) - 1.0f;
 
       // Update game state.
       Update(Memory, Input, &Renderer, &Work_Queue, Sdl.Actual_Frame_Seconds);

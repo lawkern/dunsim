@@ -24,7 +24,7 @@ typedef struct {
    union
    {
       texture Texture;
-      u32 Color;
+      vec4 Color;
    };
 } render_command;
 
@@ -44,15 +44,17 @@ typedef enum {
 typedef struct {
    texture Backbuffer;
    float Pixels_Per_Meter;
+   float Screen_Width_Meters;
+   float Screen_Height_Meters;
 
    render_queue *Queues[Render_Layer_Count];
 } renderer;
 
 // Renderer API:
-#define DRAW_CLEAR(Name) void Name(texture Destination, u32 Color)
+#define DRAW_CLEAR(Name) void Name(texture Destination, vec4 Color)
 static DRAW_CLEAR(Draw_Clear);
 
-#define DRAW_RECTANGLE(Name) void Name(texture Destination, float X, float Y, float Width, float Height, u32 Color)
+#define DRAW_RECTANGLE(Name) void Name(texture Destination, float X, float Y, float Width, float Height, vec4 Color)
 static DRAW_RECTANGLE(Draw_Rectangle);
 
 #define DRAW_TEXTURE(Name) void Name(texture Destination, texture Source, float X, float Y, float Width, float Height)

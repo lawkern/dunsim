@@ -22,7 +22,7 @@ static render_command *Push_Command(renderer *Renderer, render_layer Layer, rend
    return(Command);
 }
 
-static void Push_Clear(renderer *Renderer, u32 Color)
+static void Push_Clear(renderer *Renderer, vec4 Color)
 {
    render_command *Command = Push_Command(Renderer, Render_Layer_Background, Render_Command_Clear);
    if(Command)
@@ -31,7 +31,7 @@ static void Push_Clear(renderer *Renderer, u32 Color)
    }
 }
 
-static void Push_Rectangle(renderer *Renderer, render_layer Layer, float X, float Y, float Width, float Height, u32 Color)
+static void Push_Rectangle(renderer *Renderer, render_layer Layer, float X, float Y, float Width, float Height, vec4 Color)
 {
    render_command *Command = Push_Command(Renderer, Layer, Render_Command_Rectangle);
    if(Command)
@@ -48,7 +48,7 @@ static void Push_Rectangle(renderer *Renderer, render_layer Layer, float X, floa
    }
 }
 
-static void Push_Outline(renderer *Renderer, render_layer Layer, float X, float Y, float Width, float Height, float Weight, u32 Color)
+static void Push_Outline(renderer *Renderer, render_layer Layer, float X, float Y, float Width, float Height, float Weight, vec4 Color)
 {
    Push_Rectangle(Renderer, Layer, X, Y, Width-Weight, Weight, Color); // Top
    Push_Rectangle(Renderer, Layer, X+Weight, Y+Height-Weight, Width-Weight, Weight, Color); // Bottom
@@ -83,7 +83,6 @@ static void Push_Text(renderer *Renderer, text_font *Font, text_size Size, float
       for(size Index = 0; Index < Text.Length; ++Index)
       {
          int Codepoint = Text.Data[Index];
-
          texture Glyph = Glyphs->Bitmaps[Codepoint];
 
          render_command *Command = Push_Command(Renderer, Render_Layer_UI, Render_Command_Texture);

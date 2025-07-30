@@ -26,6 +26,19 @@ static inline int3 Int3(int X, int Y, int Z)
 }
 
 typedef struct {
+   float R;
+   float G;
+   float B;
+   float A;
+} vec4;
+
+static inline vec4 Vec4(float R, float G, float B, float A)
+{
+   vec4 Result = {R, G, B, A};
+   return(Result);
+}
+
+typedef struct {
    size Length;
    u8 *Data;
 } string;

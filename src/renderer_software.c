@@ -1,12 +1,25 @@
 /* (c) copyright 2025 Lawrence D. Kern /////////////////////////////////////// */
 
+static inline u32 Pack_Color(vec4 Color)
+{
+   u32 R = (u32)(255.0f * Color.R) << 24;
+   u32 G = (u32)(255.0f * Color.G) << 16;
+   u32 B = (u32)(255.0f * Color.B) << 8;
+   u32 A = (u32)(255.0f * Color.A) << 0;
+
+   u32 Result = (R | G | B | A);
+   return(Result);
+}
+
 static DRAW_CLEAR(Draw_Clear)
 {
+   u32 Pixel = Pack_Color(Color);
+
    for(int Y = 0; Y < Destination.Height; ++Y)
    {
       for(int X = 0; X < Destination.Width; ++X)
       {
-         Destination.Memory[(Destination.Width * Y) + X] = Color;
+         Destination.Memory[(Destination.Width * Y) + X] = Pixel;
       }
    }
 }
@@ -19,11 +32,13 @@ static DRAW_RECTANGLE(Draw_Rectangle)
    int Max_X = (int)(Minimum((float)Destination.Width, X + Width) + 0.5f);
    int Max_Y = (int)(Minimum((float)Destination.Height, Y + Height) + 0.5f);
 
+   u32 Pixel = Pack_Color(Color);
+
    for(int Y = Min_Y; Y < Max_Y; ++Y)
    {
       for(int X = Min_X; X < Max_X; ++X)
       {
-         Destination.Memory[(Destination.Width * Y) + X] = Color;
+         Destination.Memory[(Destination.Width * Y) + X] = Pixel;
       }
    }
 }
@@ -34,6 +49,7 @@ static DRAW_TEXTURE(Draw_Texture)
    Y += Source.Offset_Y;
 
    // TODO: Subpixel precision.
+
    int Min_X = (int)(Maximum(X, 0.0f) + 0.5f);
    int Min_Y = (int)(Maximum(Y, 0.0f) + 0.5f);
    int Max_X = (int)(Minimum((float)Destination.Width, X + (float)Source.Width) + 0.5f);

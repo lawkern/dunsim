@@ -78,7 +78,7 @@ static void Display_Debug_Overlay(game_state *Game_State, game_input *Input, ren
    Debug_Text_Line(&Text, "Permanent: %zuMB", (Game_State->Permanent.End - Game_State->Permanent.Begin) / Megabytes(1));
    Debug_Text_Line(&Text, "Map: %zuMB", (Game_State->Map.Arena.End - Game_State->Map.Arena.Begin) / Megabytes(1));
    Debug_Text_Line(&Text, "Scratch: %zuMB", (Game_State->Scratch.End - Game_State->Scratch.Begin) / Megabytes(1));
-   Debug_Text_Line(&Text, "Mouse: {%0.2f, %0.2f}", Input->Mouse_X, Input->Mouse_Y);
+   Debug_Text_Line(&Text, "Mouse: {%0.2f, %0.2f}", Input->Normalized_Mouse_X, Input->Normalized_Mouse_Y);
    if(Game_State->Selected_Debug_Entity_ID)
    {
       entity *Selected = Get_Entity(Game_State, Game_State->Selected_Debug_Entity_ID);
@@ -138,10 +138,12 @@ static void Display_Debug_Overlay(game_state *Game_State, game_input *Input, ren
                       (Track->Playback == Audio_Playback_Loop) ? "(loop)" : "");
    }
 
-   int Gui_Dim = Renderer->Pixels_Per_Meter;
-   int Gui_X = Renderer->Backbuffer.Width - 2*Gui_Dim*GAME_CONTROLLER_COUNT;
-   int Gui_Y = Gui_Dim;
-   int Border_Pixels = Maximum(1, Renderer->Pixels_Per_Meter / 16);
+   int Screen_Half_Width = Renderer->Screen_Width_Meters * 0.5f;
+   int Screen_Half_Height = Renderer->Screen_Height_Meters * 0.5f;
+
+   int Gui_Dim = 1;
+   int Gui_X = Screen_Half_Width - 2*Gui_Dim*GAME_CONTROLLER_COUNT;
+   int Gui_Y = Gui_Dim - Screen_Half_Height;
 
    for(int Controller_Index = 0; Controller_Index < GAME_CONTROLLER_COUNT; ++Controller_Index)
    {
@@ -149,12 +151,12 @@ static void Display_Debug_Overlay(game_state *Game_State, game_input *Input, ren
 
       if(Controller->Connected)
       {
-         Push_Rectangle(Renderer, Render_Layer_UI, Gui_X, Gui_Y, Gui_Dim, Gui_Dim, 0x00FF00FF);
+         Push_Rectangle(Renderer, Render_Layer_UI, Gui_X, Gui_Y, Gui_Dim, Gui_Dim, Vec4(0, 1, 0, 1));
       }
       else
       {
-         Push_Rectangle(Renderer, Render_Layer_UI, Gui_X, Gui_Y, Gui_Dim, Gui_Dim, 0x004400FF);
-         Push_Outline(Renderer, Render_Layer_UI, Gui_X, Gui_Y, Gui_Dim, Gui_Dim, 2*Border_Pixels, 0x00FF00FF);
+         Push_Rectangle(Renderer, Render_Layer_UI, Gui_X, Gui_Y, Gui_Dim, Gui_Dim, Vec4(0, 0.25, 0, 1));
+         Push_Outline(Renderer, Render_Layer_UI, Gui_X, Gui_Y, Gui_Dim, Gui_Dim, 0.2f, Vec4(0, 1, 0, 1));
       }
       Gui_X += (2 * Gui_Dim);
    }

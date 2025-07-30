@@ -76,7 +76,7 @@ static void Display_Textbox(game_state *Game_State, renderer *Renderer, string T
       float Box_Height = (float)Max_Line_Count*Line_Advance + 2*Padding;
       float Box_X = Margin;
       float Box_Y = Backbuffer_Height - Margin - Box_Height;
-      Push_Rectangle(Renderer, Render_Layer_UI, Box_X, Box_Y, Box_Width, Box_Height, 0x000000FF);
+      Push_Rectangle(Renderer, Render_Layer_UI, Box_X, Box_Y, Box_Width, Box_Height, Vec4(0, 0, 0, 1));
 
       float Text_X = Margin + Padding;
       float Text_Y = Box_Y + Padding + Scale*Font->Ascent;
@@ -294,9 +294,6 @@ UPDATE(Update)
    float Backbuffer_Width = (float)Renderer->Backbuffer.Width;
    float Backbuffer_Height = (float)Renderer->Backbuffer.Height;
 
-   float Screen_Width_Meters = 40.0f;
-   float Screen_Height_Meters = (Backbuffer_Height / Backbuffer_Width) * Screen_Width_Meters;
-
    if(!Permanent->Begin)
    {
       // Initialize memory.
@@ -314,6 +311,9 @@ UPDATE(Update)
       // Initialize renderer.
       Renderer->Backbuffer.Memory = Allocate(Permanent, u32, Backbuffer_Width*Backbuffer_Height);
       Renderer->Pixels_Per_Meter = Backbuffer_Width / 40;
+      Renderer->Screen_Width_Meters = 40.0f;
+      Renderer->Screen_Height_Meters = (Backbuffer_Height / Backbuffer_Width) * Renderer->Screen_Width_Meters;
+
       for(int Queue_Index = 0; Queue_Index < Array_Count(Renderer->Queues); ++Queue_Index)
       {
          Renderer->Queues[Queue_Index] = Allocate(Permanent, render_queue, 1);
@@ -510,16 +510,16 @@ UPDATE(Update)
    int3 Camera_Chunk_Position = Raw_To_Chunk_Position(Camera_Position.X, Camera_Position.Y, Camera_Position.Z);
 
    // Rendering
-   u32 Palettes[2][4] = {
-      {0x000088FF, 0x0000CCFF, 0x0000FFFF, 0x008800FF},
-      {0x008800FF, 0x00CC00FF, 0x00FF00FF, 0x000088FF},
+   vec4 Palettes[2][4] = {
+      {Vec4(0, 0, 0.5, 1), Vec4(0, 0, 0.75, 1), Vec4(0, 0, 1, 1), Vec4(0, 0.5, 0, 1)},
+      {Vec4(0, 0.5, 0, 1), Vec4(0, 0.75, 0, 1), Vec4(0, 1, 0, 1), Vec4(0, 0, 0.5, 1)}, // 0x008800FF, 0x00CC00FF, 0x00FF00FF, 0x000088FF},
    };
-   u32 *Palette = Palettes[Camera_Position.Z];
+   vec4 *Palette = Palettes[Camera_Position.Z];
 
    Push_Clear(Renderer, Palette[0]);
 
-   float Mouse_X = Input->Mouse_X * Screen_Width_Meters;
-   float Mouse_Y = Input->Mouse_Y * Screen_Height_Meters;
+   float Mouse_X = Input->Normalized_Mouse_X * Renderer->Screen_Width_Meters * 0.5f;
+   float Mouse_Y = Input->Normalized_Mouse_Y * Renderer->Screen_Height_Meters * 0.5f;
 
    int Chunk_Z = Camera_Position.Z;
    for(int Chunk_Y = Camera_Chunk_Position.Y-1; Chunk_Y <= Camera_Chunk_Position.Y+1; ++Chunk_Y)
@@ -572,16 +572,16 @@ UPDATE(Update)
                      {
                         case Entity_Type_Player: {
                            render_layer Layer = Render_Layer_Foreground;
-                           Push_Rectangle(Renderer, Layer, X, Y, Width, Height, 0x000088FF);
-                           Push_Outline(Renderer, Layer, X, Y, Width, Height, 0.1f, 0xFFFFFFFF);
-                           Push_Rectangle(Renderer, Layer, Nose_X, Nose_Y, Nose_Dim, Nose_Dim, 0x0000FFFF);
+                           Push_Rectangle(Renderer, Layer, X, Y, Width, Height, Vec4(0, 0, 0.5, 1));
+                           Push_Outline(Renderer, Layer, X, Y, Width, Height, 0.1f, Vec4(1, 1, 1, 1));
+                           Push_Rectangle(Renderer, Layer, Nose_X, Nose_Y, Nose_Dim, Nose_Dim, Vec4(0, 0, 1, 1));
                         } break;
 
                         case Entity_Type_Dragon: {
                            render_layer Layer = Render_Layer_Foreground;
-                           Push_Rectangle(Renderer, Layer, X, Y, Width, Height, 0x880000FF);
-                           Push_Outline(Renderer, Layer, X, Y, Width, Height, 0.2f, 0xFF0000FF);
-                           Push_Rectangle(Renderer, Layer, Nose_X, Nose_Y, Nose_Dim, Nose_Dim, 0xFFFF00FF);
+                           Push_Rectangle(Renderer, Layer, X, Y, Width, Height, Vec4(0.5, 0, 0, 1));
+                           Push_Outline(Renderer, Layer, X, Y, Width, Height, 0.2f, Vec4(1, 0, 0, 1));
+                           Push_Rectangle(Renderer, Layer, Nose_X, Nose_Y, Nose_Dim, Nose_Dim, Vec4(1, 1, 0, 1));
                         } break;
 
                         case Entity_Type_Floor: {
@@ -608,7 +608,7 @@ UPDATE(Update)
 
                      if(Entity_Index == Game_State->Selected_Debug_Entity_ID)
                      {
-                        Push_Outline(Renderer, Render_Layer_UI, X, Y, Width, Height, 0.2f, 0x00FF00FF);
+                        Push_Outline(Renderer, Render_Layer_UI, X, Y, Width, Height, 0.2f, Vec4(0, 1, 0, 1));
                      }
                   }
                }
