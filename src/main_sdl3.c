@@ -55,9 +55,7 @@ ENQUEUE_WORK(Enqueue_Work)
 
    Queue->Completion_Target++;
 
-   // TODO: Do we need a memory barrier here? Do we need to care about releasing
-   // it with SDL_MemoryBarrierRelease?
-   SDL_MemoryBarrierAcquire();
+   Write_Barrier();
 
    Queue->Write_Index = New_Write_Index;
 

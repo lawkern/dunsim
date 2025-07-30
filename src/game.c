@@ -7,6 +7,7 @@
 #include "map.h"
 #include "entity.h"
 #include "audio.h"
+#include "platform.h"
 #include "game.h"
 
 typedef struct {
