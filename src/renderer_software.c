@@ -2,17 +2,24 @@
 
 static inline u32 Pack_Color(vec4 Color)
 {
-   u32 R = (u32)(255.0f * Color.R) << 24;
-   u32 G = (u32)(255.0f * Color.G) << 16;
-   u32 B = (u32)(255.0f * Color.B) << 8;
-   u32 A = (u32)(255.0f * Color.A) << 0;
+   BEGIN_PROFILE(Pack_Color);
+
+   u32 R = (u32)(255.0f*Color.R + 0.5f) << 24;
+   u32 G = (u32)(255.0f*Color.G + 0.5f) << 16;
+   u32 B = (u32)(255.0f*Color.B + 0.5f) << 8;
+   u32 A = (u32)(255.0f*Color.A + 0.5f) << 0;
 
    u32 Result = (R | G | B | A);
+
+   END_PROFILE(Pack_Color);
+
    return(Result);
 }
 
 static DRAW_CLEAR(Draw_Clear)
 {
+   BEGIN_PROFILE(Draw_Clear);
+
    u32 Pixel = Pack_Color(Color);
 
    for(int Y = 0; Y < Destination.Height; ++Y)
@@ -22,10 +29,14 @@ static DRAW_CLEAR(Draw_Clear)
          Destination.Memory[(Destination.Width * Y) + X] = Pixel;
       }
    }
+
+   END_PROFILE(Draw_Clear);
 }
 
 static DRAW_RECTANGLE(Draw_Rectangle)
 {
+   BEGIN_PROFILE(Draw_Rectangle);
+
    // TODO: Subpixel precision?
    int Min_X = (int)(Maximum(X, 0.0f) + 0.5f);
    int Min_Y = (int)(Maximum(Y, 0.0f) + 0.5f);
@@ -41,10 +52,14 @@ static DRAW_RECTANGLE(Draw_Rectangle)
          Destination.Memory[(Destination.Width * Y) + X] = Pixel;
       }
    }
+
+   END_PROFILE(Draw_Rectangle);
 }
 
 static DRAW_TEXTURE(Draw_Texture)
 {
+   BEGIN_PROFILE(Draw_Texture);
+
    X += Source.Offset_X;
    Y += Source.Offset_Y;
 
@@ -87,4 +102,6 @@ static DRAW_TEXTURE(Draw_Texture)
 
       Source_Row += Source.Width;
    }
+
+   END_PROFILE(Draw_Texture);
 }

@@ -7,6 +7,10 @@
 
 // TODO: Support SIMD (SSE/AVX2/NEON)
 
+#include <x86intrin.h>
+
+#define Cpu_Cycle_Counter() __rdtsc()
+
 #define Read_Barrier()  asm volatile("" ::: "memory")
 #define Write_Barrier() asm volatile("" ::: "memory")
 

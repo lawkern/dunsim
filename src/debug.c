@@ -1,5 +1,35 @@
 /* (c) copyright 2025 Lawrence D. Kern /////////////////////////////////////// */
 
+typedef struct {
+   char *Name;
+   u64 Start;
+   u64 Elapsed;
+   int Hits;
+} debug_profile;
+
+static struct {
+   debug_profile Profiles[128];
+} Debug_Profiler;
+
+#define BEGIN_PROFILE(Name) int Debug_Profile_Index_##Name = Begin_Profile(#Name, __COUNTER__)
+#define END_PROFILE(Name) End_Profile(Debug_Profile_Index_##Name)
+
+static int Begin_Profile(char *Name, int Profile_Index)
+{
+   debug_profile *Profile = Debug_Profiler.Profiles + Profile_Index;
+   Profile->Name = Name;
+   Profile->Start = Cpu_Cycle_Counter();
+
+   return(Profile_Index);
+}
+
+static void End_Profile(int Profile_Index)
+{
+   debug_profile *Profile = Debug_Profiler.Profiles + Profile_Index;
+   Profile->Elapsed += (Cpu_Cycle_Counter() - Profile->Start);
+   Profile->Hits++;
+}
+
 static void Advance_Text_Line(text_font *Font, text_size Size, float *Y)
 {
    float Scale = Font->Glyphs[Size].Scale;
@@ -92,6 +122,22 @@ static void Display_Debug_Overlay(game_state *Game_State, game_input *Input, ren
                              Selected->Height);
    }
 
+   Debug_Text_Line(&Text, "");
+   Debug_Text_Line(&Text, "Cycle Counts:");
+
+   Text.Size = Text_Size_Small;
+   for(int Profile_Index = 0; Profile_Index < Array_Count(Debug_Profiler.Profiles); ++Profile_Index)
+   {
+      debug_profile *Profile = Debug_Profiler.Profiles + Profile_Index;
+      if(Profile->Name)
+      {
+         Debug_Text_Line(&Text, "% 16s: % 10ld avg over %d hit(s)", Profile->Name, Profile->Elapsed/Profile->Hits, Profile->Hits);
+      }
+   }
+   Zero_Size(&Debug_Profiler, sizeof(Debug_Profiler));
+
+
+   Text.Size = Text_Size_Medium;
    Debug_Text_Line(&Text, "");
    Debug_Text_Line(&Text, "Total Entities: %d", Game_State->Entity_Count);
 
