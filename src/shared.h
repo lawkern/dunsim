@@ -25,6 +25,26 @@ static inline int3 Int3(int X, int Y, int Z)
    return(Result);
 }
 
+typedef union {
+   struct
+   {
+      float X;
+      float Y;
+   };
+   struct
+   {
+      float U;
+      float V;
+   };
+   float Elements[2];
+} vec2;
+
+static inline vec2 Vec2(float X, float Y)
+{
+   vec2 Result = {X, Y};
+   return(Result);
+}
+
 typedef struct {
    float R;
    float G;

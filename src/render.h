@@ -13,6 +13,7 @@ typedef enum {
    Render_Command_Clear,
    Render_Command_Rectangle,
    Render_Command_Texture,
+   Render_Command_Debug_Basis,
 } render_command_type;
 
 typedef struct {
@@ -26,6 +27,10 @@ typedef struct {
       texture Texture;
       vec4 Color;
    };
+
+   vec2 Origin;
+   vec2 X_Axis;
+   vec2 Y_Axis;
 } render_command;
 
 typedef struct {
@@ -59,3 +64,6 @@ static DRAW_RECTANGLE(Draw_Rectangle);
 
 #define DRAW_TEXTURE(Name) void Name(texture Destination, texture Source, float X, float Y, float Width, float Height)
 static DRAW_TEXTURE(Draw_Texture);
+
+#define DRAW_QUAD(Name) void Name(texture Destination, vec2 Origin, vec2 X_Axis, vec2 Y_Axis, vec4 Color)
+static DRAW_QUAD(Draw_Quad);

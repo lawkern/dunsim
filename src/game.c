@@ -1,6 +1,8 @@
 /* (c) copyright 2025 Lawrence D. Kern /////////////////////////////////////// */
 
 #include "shared.h"
+#include "intrinsics.h"
+#include "debug.h"
 #include "render.h"
 #include "random.h"
 #include "assets.h"
@@ -42,7 +44,6 @@ typedef struct {
    bool Debug_Overlay;
 } game_state;
 
-#include "intrinsics.c"
 #include "math.c"
 #include "random.c"
 #include "assets.c"
@@ -50,8 +51,8 @@ typedef struct {
 #include "entity.c"
 #include "render.c"
 #include "audio.c"
-#include "debug.c"
 #include "renderer_software.c"
+#include "debug.c"
 
 static void Display_Textbox(game_state *Game_State, renderer *Renderer, string Text)
 {
@@ -134,10 +135,10 @@ static int Add_Camera(game_state *Game_State, int3 Position)
    return(Result);
 }
 
-static int Add_Floor(game_state *Game_State, int3 Position)
+static int Add_Floor(game_state *Game_State, int3 Position, int Width, int Height)
 {
    u32 Flags = Entity_Flag_Active|Entity_Flag_Visible;
-   int Result = Create_Entity(Game_State, Entity_Type_Floor, Position, 1, 1, Flags);
+   int Result = Create_Entity(Game_State, Entity_Type_Floor, Position, Width, Height, Flags);
    return(Result);
 }
 
@@ -181,104 +182,33 @@ static void Create_Debug_Room(game_state *Game_State)
 
    for(int Z = 0; Z <= 1; ++Z)
    {
-      for(int Y = Min_Y; Y <= Max_Y; ++Y)
+      for(int X = Min_X-1; X <= Max_X+2; ++X)
       {
-         for(int X = Min_X; X <= Max_X; ++X)
+         Add_Wall(Game_State, Int3(X, Min_Y-1, Z));
+         Add_Wall(Game_State, Int3(X, Max_Y+2, Z));
+      }
+
+      for(int Y = Min_Y-1; Y <= Max_Y+1; ++Y)
+      {
+         Add_Wall(Game_State, Int3(Min_X-1, Y, Z));
+         Add_Wall(Game_State, Int3(Max_X+2, Y, Z));
+      }
+
+      for(int Y = Min_Y; Y <= Max_Y; Y+=2)
+      {
+         for(int X = Min_X; X <= Max_X; X+=2)
          {
-            if(Y >= (Min_Y + 1) && Y <= (Min_Y + 2) &&
-               X >= (Max_X - 2) && X <= (Max_X - 1))
+            if(Y == Min_Y && X == Max_X)
             {
-               if(Y == (Min_Y + 1) && X == (Max_X - 2))
-               {
-                  Add_Stairs(Game_State, Int3(X, Y, Z));
-               }
-            }
-            else if(Y == Min_Y || Y == Max_Y || X == Min_X || X == Max_X)
-            {
-               Add_Wall(Game_State, Int3(X, Y, Z));
+               Add_Stairs(Game_State, Int3(X, Y, Z));
             }
             else
             {
-               Add_Floor(Game_State, Int3(X, Y, Z));
+               Add_Floor(Game_State, Int3(X, Y, Z), 2, 2);
             }
          }
       }
    }
-
-#if 0
-   int Chunk_X = 0;
-   int Chunk_Y = 0;
-   int Chunk_Z = 0;
-   direction Direction_Towards_Previous_Room = Direction_None;
-   for(int Chunk_Index = 0; Chunk_Index < 10; ++Chunk_Index)
-   {
-      int X = Chunk_X * MAP_CHUNK_DIM;
-      int Y = Chunk_Y * MAP_CHUNK_DIM;
-      int Z = Chunk_Z;
-
-      map_chunk *Chunk = Insert_Map_Chunk(Map, X, Y, Z);
-      for(int Offset_Y = 0; Offset_Y < MAP_CHUNK_DIM; ++Offset_Y)
-      {
-         for(int Offset_X = 0; Offset_X < MAP_CHUNK_DIM; ++Offset_X)
-         {
-            switch(Debug_Map_Chunk[Offset_Y][Offset_X])
-            {
-               case 1: { // Floor
-                  u32 Flags = Entity_Flag_Active|Entity_Flag_Visible;
-                  Create_Entity(Game_State, Entity_Type_Floor, 1, 1, X+Offset_X, Y+Offset_Y, Z, Flags);
-               } break;
-
-               case 2: { // Wall
-                  u32 Flags = Entity_Flag_Active|Entity_Flag_Visible|Entity_Flag_Collides;
-                  Create_Entity(Game_State, Entity_Type_Wall, 1, 1, X+Offset_X, Y+Offset_Y, Z, Flags);
-               } break;
-
-               case 3: { // Stairs
-                  u32 Flags = Entity_Flag_Active|Entity_Flag_Visible;
-                  Create_Entity(Game_State, Entity_Type_Stairs, 2, 2, X+Offset_X, Y+Offset_Y, Z, Flags);
-               } break;
-            }
-         }
-      }
-
-      direction Direction = Direction_Towards_Previous_Room;
-      while(Direction == Direction_Towards_Previous_Room)
-      {
-         Direction = Random_Range(&Game_State->Entropy, Direction_None, Direction_Count-1);
-      }
-
-      switch(Direction)
-      {
-         case Direction_Up: {
-            Chunk_Y -= 1;
-            Direction_Towards_Previous_Room = Direction_Down;
-         } break;
-
-         case Direction_Down: {
-            Chunk_Y += 1;
-            Direction_Towards_Previous_Room = Direction_Up;
-         } break;
-
-         case Direction_Left: {
-            Chunk_X -= 1;
-            Direction_Towards_Previous_Room = Direction_Right;
-         } break;
-
-         case Direction_Right: {
-            Chunk_X += 1;
-            Direction_Towards_Previous_Room = Direction_Left;
-         } break;
-
-         case Direction_None: {
-            Chunk_Z = (Chunk_Z) ? 0 : 1;
-         } break;
-
-         default: {
-            Assert(0);
-         } break;
-      }
-   }
-#endif
 }
 
 UPDATE(Update)
@@ -330,7 +260,7 @@ UPDATE(Update)
       {
          Game_State->Player_IDs[Player_Index] = Add_Player(Game_State, Origin);
       }
-      Add_Creature(Game_State, Entity_Type_Dragon, Int3(6, 0, Origin.Z), 4, 4);
+      Add_Creature(Game_State, Entity_Type_Dragon, Int3(6, 0, Origin.Z + 1), 4, 4);
 
       Create_Debug_Room(Game_State);
 
@@ -347,7 +277,9 @@ UPDATE(Update)
 
       Game_State->Background_Music = Load_Wave(Permanent, *Scratch, "data/bgm.wav");
       Game_State->Clap = Load_Wave(Permanent, *Scratch, "data/clap.wav");
+#if 0
       Play_Sound(Game_State, &Game_State->Background_Music, Audio_Playback_Loop);
+#endif
 
       Game_State->Textbox_Dialogue[1] = S(
          "THE FIRST WORLD\n"
@@ -511,7 +443,8 @@ UPDATE(Update)
 
    // Rendering
    vec4 Palettes[2][4] = {
-      {Vec4(0, 0, 0.5, 1), Vec4(0, 0, 0.75, 1), Vec4(0, 0, 1, 1), Vec4(0, 0.5, 0, 1)},
+      {Vec4(0.25, 0.25, 0.25, 1), Vec4(0.75, 0.75, 0.75, 1), Vec4(1, 1, 1, 1), Vec4(0.5, 0.5, 0.5, 1)},
+      // {Vec4(0, 0, 0.5, 1), Vec4(0, 0, 0.75, 1), Vec4(0, 0, 1, 1), Vec4(0, 0.5, 0, 1)},
       {Vec4(0, 0.5, 0, 1), Vec4(0, 0.75, 0, 1), Vec4(0, 1, 0, 1), Vec4(0, 0, 0.5, 1)}, // 0x008800FF, 0x00CC00FF, 0x00FF00FF, 0x000088FF},
    };
    vec4 *Palette = Palettes[Camera_Position.Z];
@@ -591,7 +524,7 @@ UPDATE(Update)
                         } break;
 
                         case Entity_Type_Wall: {
-                           render_layer Layer = Render_Layer_Foreground;
+                           render_layer Layer = Render_Layer_Background;
                            Push_Rectangle(Renderer, Layer, X, Y, Width, Height, Palette[2]);
                            Push_Outline(Renderer, Layer, X, Y, Width, Height, 0.05f, Palette[1]);
                         } break;
@@ -627,6 +560,18 @@ UPDATE(Update)
          }
       }
    }
+
+
+   static float Time = 0;
+   float Scale = 5.0f;
+   float Speed = 0.05f;
+
+   vec2 Origin = {0, 0};
+   vec2 X_Axis = Mul2(Vec2(Cosine(Speed*Time), Sine(Speed*Time)), Scale);
+   vec2 Y_Axis = Perp2(X_Axis);
+   Push_Debug_Basis(Renderer, Render_Layer_UI, Origin, X_Axis, Y_Axis);
+   Time += Frame_Seconds;
+
 
    // User Interface.
    if(Game_State->Debug_Overlay)

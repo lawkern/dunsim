@@ -105,3 +105,58 @@ static DRAW_TEXTURE(Draw_Texture)
 
    END_PROFILE(Draw_Texture);
 }
+
+static DRAW_QUAD(Draw_Quad)
+{
+   BEGIN_PROFILE(Draw_Quad);
+
+
+   int Width_Max = Destination.Width - 1;
+   int Height_Max = Destination.Height - 1;
+
+   int Min_X = Width_Max;
+   int Min_Y = Height_Max;
+   int Max_X = 0;
+   int Max_Y = 0;
+
+   vec2 Points[] = {Origin, Add2(Origin, X_Axis), Add2(Origin, Add2(X_Axis, Y_Axis)), Add2(Origin, Y_Axis)};
+   for(int Point_Index = 0; Point_Index < Array_Count(Points); ++Point_Index)
+   {
+      vec2 Point = Points[Point_Index];
+
+      int Floor_X = (int)Floor(Point.X);
+      int Floor_Y = (int)Floor(Point.Y);
+      int Ceiling_X = (int)Ceiling(Point.X);
+      int Ceiling_Y = (int)Ceiling(Point.Y);
+
+      if(Min_X > Floor_X) Min_X = Floor_X;
+      if(Min_Y > Floor_Y) Min_Y = Floor_Y;
+      if(Max_X < Ceiling_X) Max_X = Ceiling_X;
+      if(Max_Y < Ceiling_Y) Max_Y = Ceiling_Y;
+   }
+
+   if(Min_X < 0) Min_X = 0;
+   if(Min_Y < 0) Min_Y = 0;
+   if(Max_X > Width_Max)  Max_X = Width_Max;
+   if(Max_Y > Height_Max) Max_Y = Height_Max;
+
+   u32 Pixel = Pack_Color(Color);
+   for(int Y = Min_Y; Y <= Max_Y; ++Y)
+   {
+      for(int X = Min_X; X <= Max_X; ++X)
+      {
+         vec2 P = Sub2(Vec2(X, Y), Origin);
+         float Edge_0 = Dot2(P, Perp2(X_Axis));
+         float Edge_1 = Dot2(Sub2(P, X_Axis), Perp2(Y_Axis));
+         float Edge_2 = Dot2(Sub2(P, Add2(X_Axis, Y_Axis)), Neg2(Perp2(X_Axis)));
+         float Edge_3 = Dot2(Sub2(P, Y_Axis), Neg2(Perp2(Y_Axis)));
+
+         if(Edge_0 > 0 && Edge_1 > 0 && Edge_2 > 0 && Edge_3 > 0)
+         {
+            Destination.Memory[(Destination.Width * Y) + X] = Pixel;
+         }
+      }
+   }
+
+   END_PROFILE(Draw_Quad);
+}

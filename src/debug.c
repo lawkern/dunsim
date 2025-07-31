@@ -1,35 +1,5 @@
 /* (c) copyright 2025 Lawrence D. Kern /////////////////////////////////////// */
 
-typedef struct {
-   char *Name;
-   u64 Start;
-   u64 Elapsed;
-   int Hits;
-} debug_profile;
-
-static struct {
-   debug_profile Profiles[128];
-} Debug_Profiler;
-
-#define BEGIN_PROFILE(Name) int Debug_Profile_Index_##Name = Begin_Profile(#Name, __COUNTER__)
-#define END_PROFILE(Name) End_Profile(Debug_Profile_Index_##Name)
-
-static int Begin_Profile(char *Name, int Profile_Index)
-{
-   debug_profile *Profile = Debug_Profiler.Profiles + Profile_Index;
-   Profile->Name = Name;
-   Profile->Start = Cpu_Cycle_Counter();
-
-   return(Profile_Index);
-}
-
-static void End_Profile(int Profile_Index)
-{
-   debug_profile *Profile = Debug_Profiler.Profiles + Profile_Index;
-   Profile->Elapsed += (Cpu_Cycle_Counter() - Profile->Start);
-   Profile->Hits++;
-}
-
 static void Advance_Text_Line(text_font *Font, text_size Size, float *Y)
 {
    float Scale = Font->Glyphs[Size].Scale;
@@ -139,8 +109,9 @@ static void Display_Debug_Overlay(game_state *Game_State, game_input *Input, ren
 
    Text.Size = Text_Size_Medium;
    Debug_Text_Line(&Text, "");
-   Debug_Text_Line(&Text, "Total Entities: %d", Game_State->Entity_Count);
+   Debug_Text_Line(&Text, "Entities: (%d Total)", Game_State->Entity_Count);
 
+   Text.Size = Text_Size_Small;
    entity *Camera = Get_Entity(Game_State, Game_State->Camera_ID);
    map_chunk *Chunk = Get_Map_Chunk(&Game_State->Map, Camera->Position.X, Camera->Position.Y, Camera->Position.Z);
    if(Chunk)
@@ -171,17 +142,20 @@ static void Display_Debug_Overlay(game_state *Game_State, game_input *Input, ren
       }
    }
 
+   Text.Size = Text_Size_Medium;
    Debug_Text_Line(&Text, "");
    Debug_Text_Line(&Text, "Audio Tracks:");
 
+   Text.Size = Text_Size_Small;
    int Track_Index = 0;
    for(audio_track *Track = Game_State->Audio_Tracks; Track; Track = Track->Next)
    {
       Assert(Array_Count(Track->Volume) == 2);
-      Debug_Text_Line(&Text, "[%d] %d samples left, Vol: [%0.1f %0.1f] %s", Track_Index++,
+      Debug_Text_Line(&Text, "Track %d (%s): Volume: [%0.1f %0.1f], Samples Left: %d", Track_Index++,
+                      (Track->Playback == Audio_Playback_Loop) ? "loop" : "once",
                       Track->Volume[0], Track->Volume[1],
-                      Track->Sound->Sample_Count - Track->Sample_Index,
-                      (Track->Playback == Audio_Playback_Loop) ? "(loop)" : "");
+                      Track->Sound->Sample_Count - Track->Sample_Index
+                  );
    }
 
    int Screen_Half_Width = Renderer->Screen_Width_Meters * 0.5f;

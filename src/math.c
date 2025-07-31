@@ -4,16 +4,82 @@
 
 #define TAU32 6.2831853f
 
-static float Sine(float Turns)
+static inline float Sine(float Turns)
 {
    float Radians = Turns * TAU32;
    float Result = sinf(Radians);
    return(Result);
 }
 
-static float Floor(float Value)
+static inline float Cosine(float Turns)
+{
+   float Radians = Turns * TAU32;
+   float Result = cosf(Radians);
+   return(Result);
+}
+
+static inline float Floor(float Value)
 {
    float Result = floorf(Value);
+   return(Result);
+}
+
+static inline float Ceiling(float Value)
+{
+   float Result = ceilf(Value);
+   return(Result);
+}
+
+static inline float Clamp(float Value, float Min, float Max)
+{
+   float Result = Minimum(Maximum(Value, Min), Max);
+   return(Result);
+}
+
+static inline float Clamp_01(float Value)
+{
+   float Result = Minimum(Maximum(Value, 0.0f), 1.0f);
+   return(Result);
+}
+
+// Vector Math:
+
+static vec2 Add2(vec2 A, vec2 B)
+{
+   vec2 Result = {A.X+B.X, A.Y+B.Y};
+   return(Result);
+}
+
+static vec2 Sub2(vec2 A, vec2 B)
+{
+   vec2 Result = {A.X-B.X, A.Y-B.Y};
+   return(Result);
+}
+
+static vec2 Mul2(vec2 Vector, float Scalar)
+{
+   vec2 Result = Vector;
+   Result.X *= Scalar;
+   Result.Y *= Scalar;
+
+   return(Result);
+}
+
+static vec2 Neg2(vec2 Vector)
+{
+   vec2 Result = {-Vector.X, -Vector.Y};
+   return(Result);
+}
+
+static float Dot2(vec2 A, vec2 B)
+{
+   float Result = A.X*B.X + B.Y*A.Y;
+   return(Result);
+}
+
+static vec2 Perp2(vec2 Vector)
+{
+   vec2 Result = {-Vector.Y, Vector.X};
    return(Result);
 }
 
