@@ -13,6 +13,7 @@ typedef enum {
    Render_Command_Clear,
    Render_Command_Rectangle,
    Render_Command_Texture,
+   Render_Command_Textured_Quad,
    Render_Command_Debug_Basis,
 } render_command_type;
 

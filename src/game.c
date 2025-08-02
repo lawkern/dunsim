@@ -443,8 +443,8 @@ UPDATE(Update)
 
    // Rendering
    vec4 Palettes[2][4] = {
-      {Vec4(0.25, 0.25, 0.25, 1), Vec4(0.75, 0.75, 0.75, 1), Vec4(1, 1, 1, 1), Vec4(0.5, 0.5, 0.5, 1)},
-      // {Vec4(0, 0, 0.5, 1), Vec4(0, 0, 0.75, 1), Vec4(0, 0, 1, 1), Vec4(0, 0.5, 0, 1)},
+      // {Vec4(0.25, 0.25, 0.25, 1), Vec4(0.75, 0.75, 0.75, 1), Vec4(1, 1, 1, 1), Vec4(0.5, 0.5, 0.5, 1)},
+      {Vec4(0, 0, 0.5, 1), Vec4(0, 0, 0.75, 1), Vec4(0, 0, 1, 1), Vec4(0, 0.5, 0, 1)},
       {Vec4(0, 0.5, 0, 1), Vec4(0, 0.75, 0, 1), Vec4(0, 1, 0, 1), Vec4(0, 0, 0.5, 1)}, // 0x008800FF, 0x00CC00FF, 0x00FF00FF, 0x000088FF},
    };
    vec4 *Palette = Palettes[Camera_Position.Z];
@@ -532,7 +532,11 @@ UPDATE(Update)
                         case Entity_Type_Stairs: {
                            render_layer Layer = Render_Layer_Background;
                            texture Texture = (Entity->Position.Z == 0) ? Game_State->Upstairs : Game_State->Downstairs;
-                           Push_Texture(Renderer, Layer, Texture, X, Y, Width, Height);
+
+                           vec2 Origin = {X, Y};
+                           vec2 X_Axis = {Width, 0};
+                           vec2 Y_Axis = {0, Height};
+                           Push_Textured_Quad(Renderer, Layer, Texture, Origin, X_Axis, Y_Axis);
                         } break;
 
                         default: {
@@ -563,14 +567,17 @@ UPDATE(Update)
 
 
    static float Time = 0;
-   float Scale = 1.0f;
+   float Scale = 2.0f;
    float Speed = 0.05f;
 
-   vec2 Origin = {-15, 0};
+   vec2 Origin = {-15 + 2.0f*Sine(Speed*Time), 0};
    vec2 X_Axis = Mul2(Vec2(Cosine(Speed*Time), Sine(Speed*Time)), Scale);
    vec2 Y_Axis = Perp2(X_Axis);
-   // texture Texture = Game_State->Upstairs;
+
    texture Texture = Game_State->Varia_Font.Glyphs[Text_Size_Large].Bitmaps['0'];
+   float Aspect = (float)Texture.Width / (float)Texture.Height;
+   X_Axis = Mul2(X_Axis, Aspect);
+
    Push_Debug_Basis(Renderer, Texture, Origin, X_Axis, Y_Axis);
    Time += Frame_Seconds;
 

@@ -4,39 +4,39 @@
 
 #define TAU32 6.2831853f
 
-static inline float Sine(float Turns)
+static float Sine(float Turns)
 {
    float Radians = Turns * TAU32;
    float Result = sinf(Radians);
    return(Result);
 }
 
-static inline float Cosine(float Turns)
+static float Cosine(float Turns)
 {
    float Radians = Turns * TAU32;
    float Result = cosf(Radians);
    return(Result);
 }
 
-static inline float Floor(float Value)
+static float Floor(float Value)
 {
    float Result = floorf(Value);
    return(Result);
 }
 
-static inline float Ceiling(float Value)
+static float Ceiling(float Value)
 {
    float Result = ceilf(Value);
    return(Result);
 }
 
-static inline float Clamp(float Value, float Min, float Max)
+static float Clamp(float Value, float Min, float Max)
 {
    float Result = Minimum(Maximum(Value, Min), Max);
    return(Result);
 }
 
-static inline float Clamp_01(float Value)
+static float Clamp_01(float Value)
 {
    float Result = Minimum(Maximum(Value, 0.0f), 1.0f);
    return(Result);
@@ -86,6 +86,23 @@ static vec2 Perp2(vec2 Vector)
 static float Length2_Squared(vec2 Vector)
 {
    float Result = Vector.X*Vector.X + Vector.Y*Vector.Y;
+   return(Result);
+}
+
+static float Lerp(float A, float B, float T)
+{
+   float Result = (1.0f - T)*A + (T*B);
+   return(Result);
+}
+
+static vec4 Lerp4(vec4 A, vec4 B, float T)
+{
+   vec4 Result;
+   Result.X = Lerp(A.X, B.X, T);
+   Result.Y = Lerp(A.Y, B.Y, T);
+   Result.Z = Lerp(A.Z, B.Z, T);
+   Result.W = Lerp(A.W, B.W, T);
+
    return(Result);
 }
 

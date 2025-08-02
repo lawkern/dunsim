@@ -102,7 +102,7 @@ static void Display_Debug_Overlay(game_state *Game_State, game_input *Input, ren
       debug_profile *Profile = Debug_Profiler.Profiles + Profile_Index;
       if(Profile->Name)
       {
-         Debug_Text_Line(&Text, "% 16s: % 10ld avg over %d hit(s)", Profile->Name, Profile->Elapsed/Profile->Hits, Profile->Hits);
+         Debug_Text_Line(&Text, "% 20s: % 10ld avg over %d hit(s)", Profile->Name, Profile->Elapsed/Profile->Hits, Profile->Hits);
       }
    }
    Zero_Size(&Debug_Profiler, sizeof(Debug_Profiler));

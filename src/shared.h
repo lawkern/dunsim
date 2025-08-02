@@ -45,11 +45,21 @@ static inline vec2 Vec2(float X, float Y)
    return(Result);
 }
 
-typedef struct {
-   float R;
-   float G;
-   float B;
-   float A;
+typedef union {
+   struct
+   {
+      float X;
+      float Y;
+      float Z;
+      float W;
+   };
+   struct
+   {
+      float R;
+      float G;
+      float B;
+      float A;
+   };
 } vec4;
 
 static inline vec4 Vec4(float R, float G, float B, float A)

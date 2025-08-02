@@ -92,6 +92,8 @@ static texture Load_Image(arena *Arena, char *Path)
       Result.Memory = Allocate(Arena, u32, Width*Height);
       Result.Width = Width;
       Result.Height = Height;
+      Result.Offset_X = -1;
+      Result.Offset_Y = -1;
 
       u32 *Source_Pixels = (u32 *)Data;
       for(int Index = 0; Index < Width*Height; ++Index)

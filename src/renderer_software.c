@@ -11,6 +11,17 @@ static inline u32 Pack_Color(vec4 Color)
    return(Result);
 }
 
+static inline vec4 Unpack_Color(u32 Color)
+{
+   float R = (float)((Color >> 24) & 0xFF);
+   float G = (float)((Color >> 16) & 0xFF);
+   float B = (float)((Color >>  8) & 0xFF);
+   float A = (float)((Color >>  0) & 0xFF);
+
+   vec4 Result = {R, G, B, A};
+   return(Result);
+}
+
 static DRAW_CLEAR(Draw_Clear)
 {
    BEGIN_PROFILE(Draw_Clear);
@@ -105,6 +116,9 @@ static DRAW_TEXTURED_QUAD(Draw_Textured_Quad)
 {
    BEGIN_PROFILE(Draw_Textured_Quad);
 
+   // TODO: Stop storing Offsets in pixel space.
+   // Origin.X += Source.Offset_X;
+   // Origin.Y += Source.Offset_Y;
 
    int Width_Max = Destination.Width - 1;
    int Height_Max = Destination.Height - 1;
@@ -153,16 +167,35 @@ static DRAW_TEXTURED_QUAD(Draw_Textured_Quad)
             float U = Dot2(P, X_Axis) * Inv_X_Axis_Sq;
             float V = Dot2(P, Y_Axis) * Inv_Y_Axis_Sq;
 
-            int Source_X = (int)((Clamp_01(U) * (float)(Source.Width - 1)) + 0.5f);
-            int Source_Y = (int)((Clamp_01(V) * (float)(Source.Height - 1)) + 0.5f);
+            float Texel_X_Fractional = Clamp_01(U) * (float)(Source.Width - 2);
+            float Texel_Y_Fractional = Clamp_01(V) * (float)(Source.Height - 2);
 
-            u32 Source_Pixel = Source.Memory[(Source.Width * Source_Y) + Source_X];
+            int Texel_X = (int)(Texel_X_Fractional);
+            int Texel_Y = (int)(Texel_Y_Fractional);
+
+            float TX = Texel_X_Fractional - (float)Texel_X;
+            float TY = Texel_Y_Fractional - (float)Texel_Y;
+
+            u32 Texel_A_Packed = Source.Memory[(Source.Width * Texel_Y) + Texel_X];
+            u32 Texel_B_Packed = Source.Memory[(Source.Width * Texel_Y) + Texel_X + 1];
+            u32 Texel_C_Packed = Source.Memory[(Source.Width * (Texel_Y + 1)) + Texel_X];
+            u32 Texel_D_Packed = Source.Memory[(Source.Width * (Texel_Y + 1)) + Texel_X + 1];
+
+            vec4 Texel_A = Unpack_Color(Texel_A_Packed);
+            vec4 Texel_B = Unpack_Color(Texel_B_Packed);
+            vec4 Texel_C = Unpack_Color(Texel_C_Packed);
+            vec4 Texel_D = Unpack_Color(Texel_D_Packed);
+
+            vec4 Texel_AB = Lerp4(Texel_A, Texel_B, TX);
+            vec4 Texel_CD = Lerp4(Texel_C, Texel_D, TX);
+            vec4 Texel = Lerp4(Texel_AB, Texel_CD, TY);
+
+            float SR = Texel.R;
+            float SG = Texel.G;
+            float SB = Texel.B;
+            float SA = Texel.A / 255.0f;
+
             u32 Destination_Pixel = Destination.Memory[(Destination.Width * Y) + X];
-
-            float SR = (float)((Source_Pixel >> 24) & 0xFF);
-            float SG = (float)((Source_Pixel >> 16) & 0xFF);
-            float SB = (float)((Source_Pixel >>  8) & 0xFF);
-            float SA = (float)((Source_Pixel >>  0) & 0xFF) / 255.0f;
 
             float DR = (float)((Destination_Pixel >> 24) & 0xFF);
             float DG = (float)((Destination_Pixel >> 16) & 0xFF);

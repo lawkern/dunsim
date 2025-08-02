@@ -105,18 +105,35 @@ static void Push_Text(renderer *Renderer, text_font *Font, text_size Size, float
    }
 }
 
+static void Push_Textured_Quad(renderer *Renderer, render_layer Layer, texture Texture, vec2 Origin, vec2 X_Axis, vec2 Y_Axis)
+{
+   render_command *Command = Push_Command(Renderer, Layer, Render_Command_Textured_Quad);
+   if(Command)
+   {
+      float Pixels_Per_Meter = Renderer->Pixels_Per_Meter;
+      vec2 Screen_Dim = {Renderer->Backbuffer.Width, Renderer->Backbuffer.Height};
+      vec2 Screen_Center = Mul2(Screen_Dim, 0.5f);
+
+      Command->Texture = Texture;
+      Command->Origin = Add2(Mul2(Origin, Pixels_Per_Meter), Screen_Center);
+      Command->X_Axis = Mul2(X_Axis, Pixels_Per_Meter);
+      Command->Y_Axis = Mul2(Y_Axis, Pixels_Per_Meter);
+   }
+}
+
 static void Push_Debug_Basis(renderer *Renderer, texture Texture, vec2 Origin, vec2 X_Axis, vec2 Y_Axis)
 {
    render_command *Command = Push_Command(Renderer, Render_Layer_UI, Render_Command_Debug_Basis);
    if(Command)
    {
+      float Pixels_Per_Meter = Renderer->Pixels_Per_Meter;
       vec2 Screen_Dim = {Renderer->Backbuffer.Width, Renderer->Backbuffer.Height};
       vec2 Screen_Center = Mul2(Screen_Dim, 0.5f);
 
       Command->Texture = Texture;
       Command->Origin = Add2(Mul2(Origin, Renderer->Pixels_Per_Meter), Screen_Center);
-      Command->X_Axis = Mul2(X_Axis, Texture.Width);
-      Command->Y_Axis = Mul2(Y_Axis, Texture.Height);
+      Command->X_Axis = Mul2(X_Axis, Pixels_Per_Meter);
+      Command->Y_Axis = Mul2(Y_Axis, Pixels_Per_Meter);
    }
 }
 
@@ -143,6 +160,10 @@ static void Render(renderer *Renderer)
 
             case Render_Command_Texture: {
                Draw_Texture(Backbuffer, Command->Texture, Command->X, Command->Y, Command->Width, Command->Height);
+            } break;
+
+            case Render_Command_Textured_Quad: {
+               Draw_Textured_Quad(Backbuffer, Command->Texture, Command->Origin, Command->X_Axis, Command->Y_Axis);
             } break;
 
             case Render_Command_Debug_Basis: {
