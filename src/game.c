@@ -563,13 +563,15 @@ UPDATE(Update)
 
 
    static float Time = 0;
-   float Scale = 5.0f;
+   float Scale = 1.0f;
    float Speed = 0.05f;
 
-   vec2 Origin = {0, 0};
+   vec2 Origin = {-15, 0};
    vec2 X_Axis = Mul2(Vec2(Cosine(Speed*Time), Sine(Speed*Time)), Scale);
    vec2 Y_Axis = Perp2(X_Axis);
-   Push_Debug_Basis(Renderer, Render_Layer_UI, Origin, X_Axis, Y_Axis);
+   // texture Texture = Game_State->Upstairs;
+   texture Texture = Game_State->Varia_Font.Glyphs[Text_Size_Large].Bitmaps['0'];
+   Push_Debug_Basis(Renderer, Texture, Origin, X_Axis, Y_Axis);
    Time += Frame_Seconds;
 
 

@@ -33,18 +33,29 @@ static void Load_Font(text_font *Result, arena *Arena, arena Scratch, char *Path
             u8 *Bitmap = stbtt_GetCodepointBitmap(&Info, 0, Glyphs->Scale, Codepoint, &Width, &Height, &Offset_X, &Offset_Y);
 
             texture *Glyph = Glyphs->Bitmaps + Codepoint;
-            Glyph->Width    = Width;
-            Glyph->Height   = Height;
-            Glyph->Offset_X = Offset_X;
-            Glyph->Offset_Y = Offset_Y;
+            Glyph->Width    = Width + 2;
+            Glyph->Height   = Height + 2;
+            Glyph->Offset_X = Offset_X + 1;
+            Glyph->Offset_Y = Offset_Y + 1;
 
-            size Pixel_Count = Width * Height;
+            size Pixel_Count = Glyph->Width * Glyph->Height;
             Glyph->Memory = Allocate(Arena, u32, Pixel_Count);
-            for(int Index = 0; Index < Pixel_Count; ++Index)
+
+            for(int Source_Y = 0; Source_Y < Height; ++Source_Y)
             {
-               u8 Value = Bitmap[Index];
-               Glyph->Memory[Index] = (Value << 0) | (Value << 8) | (Value << 16) | (Value << 24);
+               int Destination_Y = Source_Y + 1;
+               for(int Source_X = 0; Source_X < Width; ++Source_X)
+               {
+                  int Destination_X = Source_X + 1;
+
+                  int Source_Index = (Width * Source_Y) + Source_X;
+                  int Destination_Index = (Glyph->Width * Destination_Y) + Destination_X;
+
+                  u8 Value = Bitmap[Source_Index];
+                  Glyph->Memory[Destination_Index] = (Value << 0) | (Value << 8) | (Value << 16) | (Value << 24);
+               }
             }
+
             stbtt_FreeBitmap(Bitmap, 0);
          }
       }

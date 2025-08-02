@@ -65,5 +65,5 @@ static DRAW_RECTANGLE(Draw_Rectangle);
 #define DRAW_TEXTURE(Name) void Name(texture Destination, texture Source, float X, float Y, float Width, float Height)
 static DRAW_TEXTURE(Draw_Texture);
 
-#define DRAW_QUAD(Name) void Name(texture Destination, vec2 Origin, vec2 X_Axis, vec2 Y_Axis, vec4 Color)
-static DRAW_QUAD(Draw_Quad);
+#define DRAW_TEXTURED_QUAD(Name) void Name(texture Destination, texture Source, vec2 Origin, vec2 X_Axis, vec2 Y_Axis)
+static DRAW_TEXTURED_QUAD(Draw_Textured_Quad);

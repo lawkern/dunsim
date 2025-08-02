@@ -75,6 +75,7 @@ static void Display_Debug_Overlay(game_state *Game_State, game_input *Input, ren
    Text.Font = &Game_State->Fixed_Font;
    Text.Size = Text_Size_Medium;
    Debug_Text_Line(&Text, "Frame Time: %3.3fms", Frame_Seconds*1000.0f);
+#if 0
    Debug_Text_Line(&Text, "Permanent: %zuMB", (Game_State->Permanent.End - Game_State->Permanent.Begin) / Megabytes(1));
    Debug_Text_Line(&Text, "Map: %zuMB", (Game_State->Map.Arena.End - Game_State->Map.Arena.Begin) / Megabytes(1));
    Debug_Text_Line(&Text, "Scratch: %zuMB", (Game_State->Scratch.End - Game_State->Scratch.Begin) / Megabytes(1));
@@ -94,7 +95,7 @@ static void Display_Debug_Overlay(game_state *Game_State, game_input *Input, ren
 
    Debug_Text_Line(&Text, "");
    Debug_Text_Line(&Text, "Cycle Counts:");
-
+#endif
    Text.Size = Text_Size_Small;
    for(int Profile_Index = 0; Profile_Index < Array_Count(Debug_Profiler.Profiles); ++Profile_Index)
    {
@@ -106,7 +107,7 @@ static void Display_Debug_Overlay(game_state *Game_State, game_input *Input, ren
    }
    Zero_Size(&Debug_Profiler, sizeof(Debug_Profiler));
 
-
+#if 0
    Text.Size = Text_Size_Medium;
    Debug_Text_Line(&Text, "");
    Debug_Text_Line(&Text, "Entities: (%d Total)", Game_State->Entity_Count);
@@ -157,7 +158,7 @@ static void Display_Debug_Overlay(game_state *Game_State, game_input *Input, ren
                       Track->Sound->Sample_Count - Track->Sample_Index
                   );
    }
-
+#endif
    int Screen_Half_Width = Renderer->Screen_Width_Meters * 0.5f;
    int Screen_Half_Height = Renderer->Screen_Height_Meters * 0.5f;
 

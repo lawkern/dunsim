@@ -105,14 +105,18 @@ static void Push_Text(renderer *Renderer, text_font *Font, text_size Size, float
    }
 }
 
-static void Push_Debug_Basis(renderer *Renderer, render_layer Layer, vec2 Origin, vec2 X_Axis, vec2 Y_Axis)
+static void Push_Debug_Basis(renderer *Renderer, texture Texture, vec2 Origin, vec2 X_Axis, vec2 Y_Axis)
 {
-   render_command *Command = Push_Command(Renderer, Layer, Render_Command_Debug_Basis);
+   render_command *Command = Push_Command(Renderer, Render_Layer_UI, Render_Command_Debug_Basis);
    if(Command)
    {
-      Command->Origin = Origin;
-      Command->X_Axis = X_Axis;
-      Command->Y_Axis = Y_Axis;
+      vec2 Screen_Dim = {Renderer->Backbuffer.Width, Renderer->Backbuffer.Height};
+      vec2 Screen_Center = Mul2(Screen_Dim, 0.5f);
+
+      Command->Texture = Texture;
+      Command->Origin = Add2(Mul2(Origin, Renderer->Pixels_Per_Meter), Screen_Center);
+      Command->X_Axis = Mul2(X_Axis, Texture.Width);
+      Command->Y_Axis = Mul2(Y_Axis, Texture.Height);
    }
 }
 
@@ -120,9 +124,6 @@ static void Render(renderer *Renderer)
 {
    texture Backbuffer = Renderer->Backbuffer;
    float Pixels_Per_Meter = Renderer->Pixels_Per_Meter;
-
-   vec2 Screen_Dim = {Backbuffer.Width, Backbuffer.Height};
-   vec2 Screen_Center = Mul2(Screen_Dim, 0.5f);
 
    for(int Queue_Index = 0; Queue_Index < Array_Count(Renderer->Queues); ++Queue_Index)
    {
@@ -145,17 +146,17 @@ static void Render(renderer *Renderer)
             } break;
 
             case Render_Command_Debug_Basis: {
-               vec2 Origin = Add2(Mul2(Command->Origin, Pixels_Per_Meter), Screen_Center);
-               vec2 X_Axis = Mul2(Command->X_Axis, Pixels_Per_Meter);
-               vec2 Y_Axis = Mul2(Command->Y_Axis, Pixels_Per_Meter);
+               vec2 Origin = Command->Origin;
+               vec2 X_Axis = Command->X_Axis;
+               vec2 Y_Axis = Command->Y_Axis;
+
+               Draw_Textured_Quad(Backbuffer, Command->Texture, Origin, X_Axis, Y_Axis);
 
                vec2 Origin0 = Origin;
                vec2 Origin1 = Add2(Origin, X_Axis);
                vec2 Origin2 = Add2(Origin, Y_Axis);
-
-               Draw_Quad(Backbuffer, Origin, X_Axis, Y_Axis, Vec4(0, 0, 1, 1));
-
                float Dim = 5;
+
                Draw_Rectangle(Backbuffer, Origin0.X, Origin0.Y, Dim, Dim, Vec4(1, 1, 0, 1));
                Draw_Rectangle(Backbuffer, Origin1.X, Origin1.Y, Dim, Dim, Vec4(1, 0, 0, 1));
                Draw_Rectangle(Backbuffer, Origin2.X, Origin2.Y, Dim, Dim, Vec4(0, 1, 0, 1));

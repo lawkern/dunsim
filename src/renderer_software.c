@@ -2,17 +2,12 @@
 
 static inline u32 Pack_Color(vec4 Color)
 {
-   BEGIN_PROFILE(Pack_Color);
-
    u32 R = (u32)(255.0f*Color.R + 0.5f) << 24;
    u32 G = (u32)(255.0f*Color.G + 0.5f) << 16;
    u32 B = (u32)(255.0f*Color.B + 0.5f) << 8;
    u32 A = (u32)(255.0f*Color.A + 0.5f) << 0;
 
    u32 Result = (R | G | B | A);
-
-   END_PROFILE(Pack_Color);
-
    return(Result);
 }
 
@@ -106,9 +101,9 @@ static DRAW_TEXTURE(Draw_Texture)
    END_PROFILE(Draw_Texture);
 }
 
-static DRAW_QUAD(Draw_Quad)
+static DRAW_TEXTURED_QUAD(Draw_Textured_Quad)
 {
-   BEGIN_PROFILE(Draw_Quad);
+   BEGIN_PROFILE(Draw_Textured_Quad);
 
 
    int Width_Max = Destination.Width - 1;
@@ -140,7 +135,9 @@ static DRAW_QUAD(Draw_Quad)
    if(Max_X > Width_Max)  Max_X = Width_Max;
    if(Max_Y > Height_Max) Max_Y = Height_Max;
 
-   u32 Pixel = Pack_Color(Color);
+   float Inv_X_Axis_Sq = 1.0f / Length2_Squared(X_Axis);
+   float Inv_Y_Axis_Sq = 1.0f / Length2_Squared(Y_Axis);
+
    for(int Y = Min_Y; Y <= Max_Y; ++Y)
    {
       for(int X = Min_X; X <= Max_X; ++X)
@@ -153,10 +150,37 @@ static DRAW_QUAD(Draw_Quad)
 
          if(Edge_0 > 0 && Edge_1 > 0 && Edge_2 > 0 && Edge_3 > 0)
          {
-            Destination.Memory[(Destination.Width * Y) + X] = Pixel;
+            float U = Dot2(P, X_Axis) * Inv_X_Axis_Sq;
+            float V = Dot2(P, Y_Axis) * Inv_Y_Axis_Sq;
+
+            int Source_X = (int)((Clamp_01(U) * (float)(Source.Width - 1)) + 0.5f);
+            int Source_Y = (int)((Clamp_01(V) * (float)(Source.Height - 1)) + 0.5f);
+
+            u32 Source_Pixel = Source.Memory[(Source.Width * Source_Y) + Source_X];
+            u32 Destination_Pixel = Destination.Memory[(Destination.Width * Y) + X];
+
+            float SR = (float)((Source_Pixel >> 24) & 0xFF);
+            float SG = (float)((Source_Pixel >> 16) & 0xFF);
+            float SB = (float)((Source_Pixel >>  8) & 0xFF);
+            float SA = (float)((Source_Pixel >>  0) & 0xFF) / 255.0f;
+
+            float DR = (float)((Destination_Pixel >> 24) & 0xFF);
+            float DG = (float)((Destination_Pixel >> 16) & 0xFF);
+            float DB = (float)((Destination_Pixel >>  8) & 0xFF);
+            float DA = (float)((Destination_Pixel >>  0) & 0xFF);
+
+            u32 R = (u32)((DR * (1.0f-SA) + SR) + 0.5f);
+            u32 G = (u32)((DG * (1.0f-SA) + SG) + 0.5f);
+            u32 B = (u32)((DB * (1.0f-SA) + SB) + 0.5f);
+
+            Destination.Memory[(Destination.Width * Y) + X] = (R<<24) | (G<<16) | (B<<8) | 0xFF;
+         }
+         else
+         {
+            Destination.Memory[(Destination.Width * Y) + X] = 0xFF00FFFF;
          }
       }
    }
 
-   END_PROFILE(Draw_Quad);
+   END_PROFILE(Draw_Textured_Quad);
 }

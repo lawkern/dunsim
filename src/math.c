@@ -83,6 +83,12 @@ static vec2 Perp2(vec2 Vector)
    return(Result);
 }
 
+static float Length2_Squared(vec2 Vector)
+{
+   float Result = Vector.X*Vector.X + Vector.Y*Vector.Y;
+   return(Result);
+}
+
 // NOTE: Max coordinates are currently defined to be one past the last value
 // contained in the rectangle, i.e. for(int X = Min_X; X < Max_X; ++X) will loop
 // over all horizontal coordintates inside a rectangle. This may change.
