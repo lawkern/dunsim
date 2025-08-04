@@ -1,10 +1,10 @@
 /* (c) copyright 2025 Lawrence D. Kern /////////////////////////////////////// */
 
 #define STB_TRUETYPE_IMPLEMENTATION
-#include "stb_truetype.h"
+#include "external/stb_truetype.h"
 
 #define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
+#include "external/stb_image.h"
 
 static void Load_Font(text_font *Result, arena *Arena, arena Scratch, char *Path, int Pixel_Height)
 {
