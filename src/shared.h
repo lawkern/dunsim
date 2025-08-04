@@ -1,5 +1,11 @@
 /* (c) copyright 2025 Lawrence D. Kern /////////////////////////////////////// */
 
+#define Assert(Cond) do { if(!(Cond)) { __builtin_trap(); } } while(0)
+#define Array_Count(Array) (size)(sizeof(Array) / sizeof((Array)[0]))
+
+#define Minimum(A, B) ((A) < (B) ? (A) : (B))
+#define Maximum(A, B) ((A) > (B) ? (A) : (B))
+
 #include <stdint.h>
 typedef int8_t s8;
 typedef int16_t s16;
@@ -22,49 +28,6 @@ typedef struct {
 static inline int3 Int3(int X, int Y, int Z)
 {
    int3 Result = {X, Y, Z};
-   return(Result);
-}
-
-typedef union {
-   struct
-   {
-      float X;
-      float Y;
-   };
-   struct
-   {
-      float U;
-      float V;
-   };
-   float Elements[2];
-} vec2;
-
-static inline vec2 Vec2(float X, float Y)
-{
-   vec2 Result = {X, Y};
-   return(Result);
-}
-
-typedef union {
-   struct
-   {
-      float X;
-      float Y;
-      float Z;
-      float W;
-   };
-   struct
-   {
-      float R;
-      float G;
-      float B;
-      float A;
-   };
-} vec4;
-
-static inline vec4 Vec4(float R, float G, float B, float A)
-{
-   vec4 Result = {R, G, B, A};
    return(Result);
 }
 
@@ -120,12 +83,6 @@ typedef struct {
    u8 *Begin;
    u8 *End;
 } arena;
-
-#define Assert(Cond) do { if(!(Cond)) { __builtin_trap(); } } while(0)
-#define Array_Count(Array) (size)(sizeof(Array) / sizeof((Array)[0]))
-
-#define Minimum(A, B) ((A) < (B) ? (A) : (B))
-#define Maximum(A, B) ((A) > (B) ? (A) : (B))
 
 #define Kilobytes(N) (1024 * (N))
 #define Megabytes(N) (1024 * Kilobytes(N))

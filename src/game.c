@@ -1,6 +1,7 @@
 /* (c) copyright 2025 Lawrence D. Kern /////////////////////////////////////// */
 
 #include "shared.h"
+#include "math.h"
 #include "intrinsics.h"
 #include "debug.h"
 #include "render.h"
@@ -8,6 +9,7 @@
 #include "assets.h"
 #include "map.h"
 #include "entity.h"
+#include "text.h"
 #include "audio.h"
 #include "platform.h"
 #include "game.h"
@@ -49,6 +51,7 @@ typedef struct {
 #include "assets.c"
 #include "map.c"
 #include "entity.c"
+#include "text.c"
 #include "render.c"
 #include "audio.c"
 #include "renderer_software.c"
@@ -62,24 +65,30 @@ static void Display_Textbox(game_state *Game_State, renderer *Renderer, string T
       text_size Size = Text_Size_Medium;
       text_glyphs *Glyphs = Font->Glyphs + Size;
 
-      float Scale = Glyphs->Scale;
+      float Pixels_Per_Meter = Renderer->Pixels_Per_Meter;
+      float Meters_Per_Pixel = 1.0f / Pixels_Per_Meter;
+
+      float Scale = Glyphs->Pixel_Scale * Meters_Per_Pixel;
       float Line_Advance = Scale * (Font->Ascent - Font->Descent + Font->Line_Gap);
 
-      float Margin = 10.0f;
-      float Padding = 25.0f;
-      float Backbuffer_Width = (float)Renderer->Backbuffer.Width;
-      float Backbuffer_Height = (float)Renderer->Backbuffer.Height;
+      float Margin = 0.5f;
+      float Padding = 1.0f;
+
+      vec2 Screen_Dim = {Renderer->Screen_Width_Meters, Renderer->Screen_Height_Meters};
+      vec2 Screen_Center = Mul2(Screen_Dim, 0.5f);
 
       int Line_Count = 1;
       int Max_Line_Count = 6;
 
-      float Box_Width = Backbuffer_Width - 2*Margin;
-      float Box_Height = (float)Max_Line_Count*Line_Advance + 2*Padding;
-      float Box_X = Margin;
-      float Box_Y = Backbuffer_Height - Margin - Box_Height;
+      float Box_Width = Screen_Dim.X - 2*Margin;
+      float Box_Height = ((float)Max_Line_Count * Line_Advance) + 2*Padding;
+      float Box_X = Margin - Screen_Center.X;
+      float Box_Y = -(Margin + Box_Height - Screen_Center.Y);
+
       Push_Rectangle(Renderer, Render_Layer_UI, Box_X, Box_Y, Box_Width, Box_Height, Vec4(0, 0, 0, 1));
 
-      float Text_X = Margin + Padding;
+      float Text_X_Initial = Margin + Padding - Screen_Center.X;
+      float Text_X = Text_X_Initial;
       float Text_Y = Box_Y + Padding + Scale*Font->Ascent;
 
       cut Words = {0};
@@ -89,11 +98,11 @@ static void Display_Textbox(game_state *Game_State, renderer *Renderer, string T
          Words = Cut(Words.After, ' ');
          string Word = Words.Before;
 
-         float Width = Get_Text_Width(Font, Size, Word);
+         float Width = Get_Text_Width_Pixels(Font, Size, Word) * Meters_Per_Pixel;
          if((Box_X + Box_Width - Padding) < (Text_X + Width))
          {
-            Text_X = Margin + Padding;
-            Advance_Text_Line(Font, Size, &Text_Y);
+            Text_X = Text_X_Initial;
+            Advance_Text_Line(Font, Size, Meters_Per_Pixel, &Text_Y);
             Line_Count++;
          }
 
@@ -102,8 +111,8 @@ static void Display_Textbox(game_state *Game_State, renderer *Renderer, string T
             int Codepoint = Word.Data[Index];
             if(Codepoint == '\n')
             {
-               Text_X = Margin + Padding;
-               Advance_Text_Line(Font, Size, &Text_Y);
+               Text_X = Text_X_Initial;
+               Advance_Text_Line(Font, Size, Meters_Per_Pixel, &Text_Y);
                Line_Count++;
             }
             else

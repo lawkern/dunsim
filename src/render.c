@@ -77,8 +77,12 @@ static void Push_Text(renderer *Renderer, text_font *Font, text_size Size, float
 {
    if(Font->Loaded)
    {
+      float Pixels_Per_Meter = Renderer->Pixels_Per_Meter;
+      float Screen_Center_X = Renderer->Backbuffer.Width * 0.5f;
+      float Screen_Center_Y = Renderer->Backbuffer.Height * 0.5f;
+
       text_glyphs *Glyphs = Font->Glyphs + Size;
-      float Scale = Glyphs->Scale;
+      float Scale = Glyphs->Pixel_Scale * 1.0f/Pixels_Per_Meter;
 
       for(size Index = 0; Index < Text.Length; ++Index)
       {
@@ -89,8 +93,8 @@ static void Push_Text(renderer *Renderer, text_font *Font, text_size Size, float
          if(Command)
          {
             Command->Texture = Glyph;
-            Command->X = X;
-            Command->Y = Y;
+            Command->X = (X * Pixels_Per_Meter) + Screen_Center_X;
+            Command->Y = (Y * Pixels_Per_Meter) + Screen_Center_Y;
             Command->Width = Glyph.Width;
             Command->Height = Glyph.Height;
          }

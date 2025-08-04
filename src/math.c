@@ -1,9 +1,5 @@
 /* (c) copyright 2025 Lawrence D. Kern /////////////////////////////////////// */
 
-#include <math.h>
-
-#define TAU32 6.2831853f
-
 static float Sine(float Turns)
 {
    float Radians = Turns * TAU32;
@@ -105,17 +101,6 @@ static vec4 Lerp4(vec4 A, vec4 B, float T)
 
    return(Result);
 }
-
-// NOTE: Max coordinates are currently defined to be one past the last value
-// contained in the rectangle, i.e. for(int X = Min_X; X < Max_X; ++X) will loop
-// over all horizontal coordintates inside a rectangle. This may change.
-
-typedef struct {
-   int Min_X;
-   int Min_Y;
-   int Max_X;
-   int Max_Y;
-} rectangle;
 
 static rectangle To_Rectangle(int X, int Y, int Width, int Height)
 {

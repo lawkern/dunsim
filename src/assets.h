@@ -1,26 +1,32 @@
 /* (c) copyright 2025 Lawrence D. Kern /////////////////////////////////////// */
 
-typedef enum {
-   Text_Size_Small,
-   Text_Size_Medium,
-   Text_Size_Large,
-
-   Text_Size_Count,
-} text_size;
-
-#define GLYPH_COUNT 128
+#pragma pack(push, 1)
 typedef struct {
-   float Scale;
-   texture Bitmaps[GLYPH_COUNT];
-} text_glyphs;
+   u32 Chunk_ID;
+   u32 Chunk_Size;
+} wave_header;
 
 typedef struct {
-   float Ascent;
-   float Descent;
-   float Line_Gap;
+   wave_header Header;
+   u32 Wave_ID;
+} wave_riff_chunk;
 
-   text_glyphs Glyphs[Text_Size_Count];
-   float *Distances;
+typedef struct {
+   wave_header Header;
+   u16 Format;
+   u16 Channel_Count;
+   u32 Samples_Per_Second;
+   u32 Average_Bytes_Per_Second;
+   u16 Block_Align;
+   u16 Bits_Per_Sample;
+   u16 Extension_Size;
+   u16 Valid_Bits_Per_Sample;
+} wave_format_chunk;
 
-   bool Loaded;
-} text_font;
+typedef struct {
+   wave_header Header;
+   s16 Data[];
+} wave_data_chunk;
+#pragma pack(pop)
+
+#define WAVE_FORMAT_PCM 0x0001

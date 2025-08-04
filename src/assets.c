@@ -24,13 +24,13 @@ static void Load_Font(text_font *Result, arena *Arena, arena Scratch, char *Path
       for(int Size_Index = 0; Size_Index < Text_Size_Count; ++Size_Index)
       {
          text_glyphs *Glyphs = Result->Glyphs + Size_Index;
-         Glyphs->Scale = stbtt_ScaleForPixelHeight(&Info, Pixel_Height);
+         Glyphs->Pixel_Scale = stbtt_ScaleForPixelHeight(&Info, Pixel_Height);
          Pixel_Height += 8;
 
          for(int Codepoint = ' '; Codepoint <= '~'; ++Codepoint)
          {
             int Width, Height, Offset_X, Offset_Y;
-            u8 *Bitmap = stbtt_GetCodepointBitmap(&Info, 0, Glyphs->Scale, Codepoint, &Width, &Height, &Offset_X, &Offset_Y);
+            u8 *Bitmap = stbtt_GetCodepointBitmap(&Info, 0, Glyphs->Pixel_Scale, Codepoint, &Width, &Height, &Offset_X, &Offset_Y);
 
             texture *Glyph = Glyphs->Bitmaps + Codepoint;
             Glyph->Width    = Width + 2;
@@ -113,37 +113,6 @@ static texture Load_Image(arena *Arena, char *Path)
 
    return(Result);
 }
-
-#pragma pack(push, 1)
-typedef struct {
-   u32 Chunk_ID;
-   u32 Chunk_Size;
-} wave_header;
-
-typedef struct {
-   wave_header Header;
-   u32 Wave_ID;
-} wave_riff_chunk;
-
-typedef struct {
-   wave_header Header;
-   u16 Format;
-   u16 Channel_Count;
-   u32 Samples_Per_Second;
-   u32 Average_Bytes_Per_Second;
-   u16 Block_Align;
-   u16 Bits_Per_Sample;
-   u16 Extension_Size;
-   u16 Valid_Bits_Per_Sample;
-} wave_format_chunk;
-
-typedef struct {
-   wave_header Header;
-   s16 Data[];
-} wave_data_chunk;
-#pragma pack(pop)
-
-#define WAVE_FORMAT_PCM 0x0001
 
 static audio_sound Load_Wave(arena *Arena, arena Scratch, char *Path)
 {

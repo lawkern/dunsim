@@ -1,56 +1,8 @@
 /* (c) copyright 2025 Lawrence D. Kern /////////////////////////////////////// */
 
-static void Advance_Text_Line(text_font *Font, text_size Size, float *Y)
-{
-   float Scale = Font->Glyphs[Size].Scale;
-
-   float Line_Advance = Scale * (Font->Ascent - Font->Descent + Font->Line_Gap);
-   *Y += Line_Advance;
-}
-
-static float Get_Text_Width(text_font *Font, text_size Size, string Text)
-{
-   float Result = 0;
-
-   float Scale = Font->Glyphs[Size].Scale;
-   for(size Index = 0; Index < Text.Length; ++Index)
-   {
-      if(Index != Text.Length-1)
-      {
-         int C0 = Text.Data[Index + 0];
-         int C1 = Text.Data[Index + 1];
-
-         Result += (Scale * Font->Distances[(C0 * GLYPH_COUNT) + C1]);
-      }
-   }
-
-   return(Result);
-}
-
-typedef struct {
-   renderer *Renderer;
-   float X;
-   float Y;
-
-   text_font *Font;
-   text_size Size;
-} text_context;
-
-static text_context Begin_Text(renderer *Renderer, int X, int Y, text_font *Font, text_size Size)
-{
-   text_context Result = {0};
-   Result.Renderer = Renderer;
-   Result.X = X;
-   Result.Y = Y;
-   Result.Font = Font;
-   Result.Size = Size;
-
-   return(Result);
-}
-
 static void Debug_Text_Line(text_context *Text, char *Format, ...)
 {
-   Advance_Text_Line(Text->Font, Text->Size, &Text->Y);
+   Advance_Text_Line(Text->Font, Text->Size, 1.0f/Text->Renderer->Pixels_Per_Meter, &Text->Y);
 
    char Data[128];
    string String = {0};
@@ -66,8 +18,11 @@ static void Debug_Text_Line(text_context *Text, char *Format, ...)
 
 static void Display_Debug_Overlay(game_state *Game_State, game_input *Input, renderer *Renderer, float Frame_Seconds)
 {
-   int Start_X = Renderer->Pixels_Per_Meter / 2;
-   int Start_Y = 0;
+   vec2 Screen_Dim = {Renderer->Screen_Width_Meters, Renderer->Screen_Height_Meters};
+   vec2 Screen_Center = Mul2(Screen_Dim, 0.5f);
+
+   float Start_X = -Screen_Center.X + 0.5f;
+   float Start_Y = -Screen_Center.Y;
 
    text_context Text = Begin_Text(Renderer, Start_X, Start_Y, &Game_State->Varia_Font, Text_Size_Large);
    Debug_Text_Line(&Text, "Dungeon Simulator");
