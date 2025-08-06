@@ -28,6 +28,7 @@ static DRAW_CLEAR(Draw_Clear)
 
    u32 Pixel = Pack_Color(Color);
 
+#if 0
    for(int Y = 0; Y < Destination.Height; ++Y)
    {
       for(int X = 0; X < Destination.Width; ++X)
@@ -35,6 +36,24 @@ static DRAW_CLEAR(Draw_Clear)
          Destination.Memory[(Destination.Width * Y) + X] = Pixel;
       }
    }
+#else
+   __m128i Pixels = _mm_set1_epi32(Pixel);
+
+   int Pixel_Count = Destination.Width * Destination.Height;
+   int Stride = 4;
+
+   int Index = 0;
+   while(Index < (Pixel_Count - Stride))
+   {
+      _mm_store_si128((__m128i *)(Destination.Memory + Index), Pixels);
+      Index += Stride;
+   }
+   while(Index < Pixel_Count)
+   {
+      *(Destination.Memory + Index) = Pixel;
+      Index++;
+   }
+#endif
 
    END_PROFILE(Draw_Clear);
 }
