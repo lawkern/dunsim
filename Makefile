@@ -1,5 +1,5 @@
 CFLAGS = -g3 -Wall -Wextra -Wno-unused-function -Wno-unused-variable -Wno-unused-parameter -Wno-multichar -Wno-missing-braces
-LDLIBS = -lm
+LDLIBS = -lm -lGL
 
 compile:
 	$(CC) -o build/ctime src/external/ctime.c

@@ -1,5 +1,12 @@
 /* (c) copyright 2025 Lawrence D. Kern /////////////////////////////////////// */
 
+#define USING_OPENGL 1
+
+typedef enum {
+   Renderer_Backend_Software,
+   Renderer_Backend_OpenGL,
+} renderer_backend;
+
 typedef struct {
    int Width;
    int Height;

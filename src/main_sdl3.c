@@ -1,6 +1,7 @@
 /* (c) copyright 2025 Lawrence D. Kern /////////////////////////////////////// */
 
 #include "SDL3/SDL.h"
+#include "SDL3/SDL_opengl.h"
 #include "game.c"
 
 LOG(Log)
@@ -62,7 +63,7 @@ ENQUEUE_WORK(Enqueue_Work)
    SDL_SignalSemaphore(Queue->Semaphore);
 }
 
-static bool Sdl_Dequeue_Work(work_queue *Queue)
+static bool Sdl3_Dequeue_Work(work_queue *Queue)
 {
    // NOTE: Return whether this thread should be made to wait until more work
    // becomes available.
@@ -90,19 +91,19 @@ FLUSH_QUEUE(Flush_Queue)
 {
    while(Queue->Completion_Target > Queue->Completion_Count)
    {
-      Sdl_Dequeue_Work(Queue);
+      Sdl3_Dequeue_Work(Queue);
    }
 
    Queue->Completion_Target = 0;
    Queue->Completion_Count = 0;
 }
 
-static int Sdl_Thread_Procedure(void *Parameter)
+static int Sdl3_Thread_Procedure(void *Parameter)
 {
    work_queue *Queue = (work_queue *)Parameter;
    while(1)
    {
-      if(Sdl_Dequeue_Work(Queue))
+      if(Sdl3_Dequeue_Work(Queue))
       {
          SDL_WaitSemaphore(Queue->Semaphore);
       }
@@ -112,8 +113,19 @@ static int Sdl_Thread_Procedure(void *Parameter)
 
 static struct {
    SDL_Window *Window;
-   SDL_Renderer *Renderer;
-   SDL_Texture *Texture;
+
+   int Backbuffer_Width;
+   int Backbuffer_Height;
+   union
+   {
+      struct
+      {
+         SDL_Renderer *Renderer;
+         SDL_Texture *Texture;
+      };
+      SDL_GLContext OpenGL_Context;
+   };
+
    SDL_Gamepad *Gamepads[GAME_CONTROLLER_COUNT];
 
    Uint64 Frequency;
@@ -125,15 +137,15 @@ static struct {
    float Actual_Frame_Seconds;
 
    SDL_AudioStream *Audio_Stream;
-} Sdl;
+} Sdl3;
 
-static void Sdl_Process_Button(game_button *Button, bool Pressed)
+static void Sdl3_Process_Button(game_button *Button, bool Pressed)
 {
    Button->Pressed = Pressed;
    Button->Transitioned = true;
 }
 
-static float Sdl_Process_Stick(SDL_Gamepad *Gamepad, SDL_GamepadAxis Axis)
+static float Sdl3_Process_Stick(SDL_Gamepad *Gamepad, SDL_GamepadAxis Axis)
 {
    float Result = 0.0f;
 
@@ -152,7 +164,7 @@ static float Sdl_Process_Stick(SDL_Gamepad *Gamepad, SDL_GamepadAxis Axis)
    return(Result);
 }
 
-static float Sdl_Process_Trigger(SDL_Gamepad *Gamepad, SDL_GamepadAxis Axis)
+static float Sdl3_Process_Trigger(SDL_Gamepad *Gamepad, SDL_GamepadAxis Axis)
 {
    float Result = 0.0f;
 
@@ -170,12 +182,12 @@ static float Sdl_Process_Trigger(SDL_Gamepad *Gamepad, SDL_GamepadAxis Axis)
    return(Result);
 }
 
-static int Sdl_Get_Gamepad_Index(SDL_JoystickID ID)
+static int Sdl3_Get_Gamepad_Index(SDL_JoystickID ID)
 {
    int Result = 0;
    for(int Gamepad_Index = 1; Gamepad_Index < GAME_CONTROLLER_COUNT; ++Gamepad_Index)
    {
-      SDL_Gamepad *Gamepad = Sdl.Gamepads[Gamepad_Index];
+      SDL_Gamepad *Gamepad = Sdl3.Gamepads[Gamepad_Index];
       if(Gamepad)
       {
          SDL_Joystick *Joystick = SDL_GetGamepadJoystick(Gamepad);
@@ -187,6 +199,83 @@ static int Sdl_Get_Gamepad_Index(SDL_JoystickID ID)
       }
    }
    return(Result);
+}
+
+static void Sdl3_Initialize_Software_Renderer(int Window_Width, int Window_Height)
+{
+   if(!SDL_CreateWindowAndRenderer("SDL Platform Build", Window_Width, Window_Height, 0, &Sdl3.Window, &Sdl3.Renderer))
+   {
+      SDL_Log("Failed to create window/renderer: %s", SDL_GetError());
+      SDL_assert(0);
+   }
+
+   if(!SDL_SetRenderVSync(Sdl3.Renderer, 1))
+   {
+      SDL_Log("Failed to set vsync: %s", SDL_GetError());
+   }
+
+   if(!SDL_GetWindowSizeInPixels(Sdl3.Window, &Sdl3.Backbuffer_Width, &Sdl3.Backbuffer_Height))
+   {
+      SDL_Log("Failed to get window size: %s", SDL_GetError());
+      Sdl3.Backbuffer_Width = Window_Width;
+      Sdl3.Backbuffer_Height = Window_Height;
+   }
+
+   Sdl3.Texture = SDL_CreateTexture(Sdl3.Renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, Sdl3.Backbuffer_Width, Sdl3.Backbuffer_Height);
+   if(!Sdl3.Texture)
+   {
+      SDL_Log("Failed to create SDL texture: %s", SDL_GetError());
+      SDL_assert(0);
+   }
+}
+
+static void Sdl3_Initialize_OpenGL(int Window_Width, int Window_Height)
+{
+   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+   SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+   SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+
+   Sdl3.Window = SDL_CreateWindow("SDL Platform Build (OpenGL)", Window_Width, Window_Height, SDL_WINDOW_OPENGL);
+   if(!Sdl3.Window)
+   {
+      SDL_Log("Failed to create OpenGL window: %s", SDL_GetError());
+      SDL_assert(0);
+   }
+
+   if(!SDL_GetWindowSizeInPixels(Sdl3.Window, &Sdl3.Backbuffer_Width, &Sdl3.Backbuffer_Height))
+   {
+      SDL_Log("Failed to get window size: %s", SDL_GetError());
+      Sdl3.Backbuffer_Width = Window_Width;
+      Sdl3.Backbuffer_Height = Window_Height;
+   }
+
+   SDL_GLContext Context = SDL_GL_CreateContext(Sdl3.Window);
+   if(!Context)
+   {
+      SDL_Log("Failed to create OpenGL context: %s", SDL_GetError());
+      SDL_assert(0);
+   }
+
+   SDL_GL_SetSwapInterval(1);
+}
+
+static void Sdl3_Display_With_Software_Renderer(renderer *Renderer, SDL_FRect Dst_Rect)
+{
+   SDL_SetRenderDrawColor(Sdl3.Renderer, 0, 0, 0, 255);
+   SDL_RenderClear(Sdl3.Renderer);
+
+   void *Backbuffer_Memory = Renderer->Backbuffer.Memory;
+   size Backbuffer_Size = Renderer->Backbuffer.Width * sizeof(*Renderer->Backbuffer.Memory);
+   SDL_UpdateTexture(Sdl3.Texture, 0, Backbuffer_Memory, Backbuffer_Size);
+   SDL_RenderTexture(Sdl3.Renderer, Sdl3.Texture, 0, &Dst_Rect);
+   SDL_RenderPresent(Sdl3.Renderer);
+}
+
+static void Sdl3_Display_With_OpenGL(void)
+{
+   glViewport(0, 0, Sdl3.Backbuffer_Width, Sdl3.Backbuffer_Height);
+   SDL_GL_SwapWindow(Sdl3.Window);
 }
 
 int main(void)
@@ -201,56 +290,36 @@ int main(void)
       SDL_assert(0);
    }
 
-   if(!SDL_CreateWindowAndRenderer("SDL Platform Build", Window_Width, Window_Height, 0, &Sdl.Window, &Sdl.Renderer))
-   {
-      SDL_Log("Failed to create window/renderer: %s", SDL_GetError());
-      SDL_assert(0);
-   }
+#if USING_OPENGL
+   Sdl3_Initialize_OpenGL(Window_Width, Window_Height);
+#else
+   Sdl3_Initialize_Software_Renderer(Window_Width, Window_Height);
+#endif
 
-   if(!SDL_SetRenderVSync(Sdl.Renderer, 1))
-   {
-      SDL_Log("Failed to set vsync: %s", SDL_GetError());
-   }
+   Sdl3.Frequency = SDL_GetPerformanceFrequency();
 
-   int Texture_Width, Texture_Height;
-   if(!SDL_GetWindowSizeInPixels(Sdl.Window, &Texture_Width, &Texture_Height))
-   {
-      SDL_Log("Failed to get window size: %s", SDL_GetError());
-      Texture_Width = Window_Width;
-      Texture_Height = Window_Height;
-   }
-
-   Sdl.Texture = SDL_CreateTexture(Sdl.Renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, Texture_Width, Texture_Height);
-   if(!Sdl.Texture)
-   {
-      SDL_Log("Failed to create SDL texture: %s", SDL_GetError());
-      SDL_assert(0);
-   }
-
-   Sdl.Frequency = SDL_GetPerformanceFrequency();
-
-   int Display_ID = SDL_GetDisplayForWindow(Sdl.Window);
+   int Display_ID = SDL_GetDisplayForWindow(Sdl3.Window);
    const SDL_DisplayMode *Display_Mode = SDL_GetCurrentDisplayMode(Display_ID);
-   Sdl.Monitor_Refresh_Rate = (Display_Mode && Display_Mode->refresh_rate > 0)
+   Sdl3.Monitor_Refresh_Rate = (Display_Mode && Display_Mode->refresh_rate > 0)
       ? Display_Mode->refresh_rate
       : 60.0f;
-   Sdl.Target_Frame_Seconds = 1.0f / Sdl.Monitor_Refresh_Rate;
+   Sdl3.Target_Frame_Seconds = 1.0f / Sdl3.Monitor_Refresh_Rate;
 
-   SDL_Log("Monitor refresh rate: %02f", Sdl.Monitor_Refresh_Rate);
-   SDL_Log("Target frame time: %0.03fms", Sdl.Target_Frame_Seconds * 1000.0f);
+   SDL_Log("Monitor refresh rate: %02f", Sdl3.Monitor_Refresh_Rate);
+   SDL_Log("Target frame time: %0.03fms", Sdl3.Target_Frame_Seconds * 1000.0f);
 
    SDL_AudioSpec Audio_Spec = {0};
    Audio_Spec.format = SDL_AUDIO_S16;
    Audio_Spec.channels = AUDIO_CHANNEL_COUNT;
    Audio_Spec.freq = AUDIO_FREQUENCY;
 
-   Sdl.Audio_Stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &Audio_Spec, 0, 0);
-   if(!Sdl.Audio_Stream)
+   Sdl3.Audio_Stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &Audio_Spec, 0, 0);
+   if(!Sdl3.Audio_Stream)
    {
       SDL_Log("Failed to open audio stream: %s", SDL_GetError());
       SDL_assert(0);
    }
-   SDL_ResumeAudioStreamDevice(Sdl.Audio_Stream);
+   SDL_ResumeAudioStreamDevice(Sdl3.Audio_Stream);
 
    // Initialize game.
    game_memory Memory = {0};
@@ -259,8 +328,8 @@ int main(void)
    SDL_assert(Memory.Base);
 
    renderer Renderer = {0};
-   Renderer.Backbuffer.Width = Texture_Width;
-   Renderer.Backbuffer.Height = Texture_Height;
+   Renderer.Backbuffer.Width = Sdl3.Backbuffer_Width;
+   Renderer.Backbuffer.Height = Sdl3.Backbuffer_Height;
 
    int Input_Index = 0;
    game_input Inputs[16] = {0};
@@ -273,7 +342,7 @@ int main(void)
    int Core_Count = SDL_GetNumLogicalCPUCores();
    for(int Thread_Index = 1; Thread_Index < Core_Count; ++Thread_Index)
    {
-      SDL_Thread *Thread = SDL_CreateThread(Sdl_Thread_Procedure, 0, &Work_Queue);
+      SDL_Thread *Thread = SDL_CreateThread(Sdl3_Thread_Procedure, 0, &Work_Queue);
       if(Thread)
       {
          SDL_DetachThread(Thread);
@@ -321,24 +390,24 @@ int main(void)
                         {
                            if(Key_Event.key == SDLK_F || (Key_Event.mod & SDL_KMOD_ALT))
                            {
-                              bool Is_Fullscreen = (SDL_GetWindowFlags(Sdl.Window) & SDL_WINDOW_FULLSCREEN);
-                              SDL_SetWindowFullscreen(Sdl.Window, Is_Fullscreen ? 0 : SDL_WINDOW_FULLSCREEN);
+                              bool Is_Fullscreen = (SDL_GetWindowFlags(Sdl3.Window) & SDL_WINDOW_FULLSCREEN);
+                              SDL_SetWindowFullscreen(Sdl3.Window, Is_Fullscreen ? 0 : SDL_WINDOW_FULLSCREEN);
                            }
                         }
                      } break;
 
-                     case SDLK_I:                  { Sdl_Process_Button(&Keyboard->Action_Up, Key_Event.down); } break;
-                     case SDLK_K:                  { Sdl_Process_Button(&Keyboard->Action_Down, Key_Event.down); } break;
-                     case SDLK_J:                  { Sdl_Process_Button(&Keyboard->Action_Left, Key_Event.down); } break;
-                     case SDLK_L:                  { Sdl_Process_Button(&Keyboard->Action_Right, Key_Event.down); } break;
-                     case SDLK_W: case SDLK_UP:    { Sdl_Process_Button(&Keyboard->Move_Up, Key_Event.down); } break;
-                     case SDLK_S: case SDLK_DOWN:  { Sdl_Process_Button(&Keyboard->Move_Down, Key_Event.down); } break;
-                     case SDLK_A: case SDLK_LEFT:  { Sdl_Process_Button(&Keyboard->Move_Left, Key_Event.down); } break;
-                     case SDLK_D: case SDLK_RIGHT: { Sdl_Process_Button(&Keyboard->Move_Right, Key_Event.down); } break;
-                     case SDLK_Q:                  { Sdl_Process_Button(&Keyboard->Shoulder_Left, Key_Event.down); } break;
-                     case SDLK_E:                  { Sdl_Process_Button(&Keyboard->Shoulder_Right, Key_Event.down); } break;
-                     case SDLK_SPACE:              { Sdl_Process_Button(&Keyboard->Start, Key_Event.down); } break;
-                     case SDLK_BACKSPACE:          { Sdl_Process_Button(&Keyboard->Back, Key_Event.down); } break;
+                     case SDLK_I:                  { Sdl3_Process_Button(&Keyboard->Action_Up, Key_Event.down); } break;
+                     case SDLK_K:                  { Sdl3_Process_Button(&Keyboard->Action_Down, Key_Event.down); } break;
+                     case SDLK_J:                  { Sdl3_Process_Button(&Keyboard->Action_Left, Key_Event.down); } break;
+                     case SDLK_L:                  { Sdl3_Process_Button(&Keyboard->Action_Right, Key_Event.down); } break;
+                     case SDLK_W: case SDLK_UP:    { Sdl3_Process_Button(&Keyboard->Move_Up, Key_Event.down); } break;
+                     case SDLK_S: case SDLK_DOWN:  { Sdl3_Process_Button(&Keyboard->Move_Down, Key_Event.down); } break;
+                     case SDLK_A: case SDLK_LEFT:  { Sdl3_Process_Button(&Keyboard->Move_Left, Key_Event.down); } break;
+                     case SDLK_D: case SDLK_RIGHT: { Sdl3_Process_Button(&Keyboard->Move_Right, Key_Event.down); } break;
+                     case SDLK_Q:                  { Sdl3_Process_Button(&Keyboard->Shoulder_Left, Key_Event.down); } break;
+                     case SDLK_E:                  { Sdl3_Process_Button(&Keyboard->Shoulder_Right, Key_Event.down); } break;
+                     case SDLK_SPACE:              { Sdl3_Process_Button(&Keyboard->Start, Key_Event.down); } break;
+                     case SDLK_BACKSPACE:          { Sdl3_Process_Button(&Keyboard->Back, Key_Event.down); } break;
                   }
                }
             } break;
@@ -348,9 +417,9 @@ int main(void)
                SDL_MouseButtonEvent Button_Event = Event.button;
                switch(Button_Event.button)
                {
-                  case SDL_BUTTON_LEFT:   { Sdl_Process_Button(&Input->Mouse_Button_Left, Button_Event.down); } break;
-                  case SDL_BUTTON_MIDDLE: { Sdl_Process_Button(&Input->Mouse_Button_Middle, Button_Event.down); } break;
-                  case SDL_BUTTON_RIGHT:  { Sdl_Process_Button(&Input->Mouse_Button_Right, Button_Event.down); } break;
+                  case SDL_BUTTON_LEFT:   { Sdl3_Process_Button(&Input->Mouse_Button_Left, Button_Event.down); } break;
+                  case SDL_BUTTON_MIDDLE: { Sdl3_Process_Button(&Input->Mouse_Button_Middle, Button_Event.down); } break;
+                  case SDL_BUTTON_RIGHT:  { Sdl3_Process_Button(&Input->Mouse_Button_Right, Button_Event.down); } break;
                }
             } break;
 
@@ -358,7 +427,7 @@ int main(void)
             case SDL_EVENT_GAMEPAD_BUTTON_DOWN: {
                SDL_GamepadButtonEvent Button_Event = Event.gbutton;
 
-               int Gamepad_Index = Sdl_Get_Gamepad_Index(Button_Event.which);
+               int Gamepad_Index = Sdl3_Get_Gamepad_Index(Button_Event.which);
                SDL_assert(Gamepad_Index > 0);
                SDL_assert(Gamepad_Index < GAME_CONTROLLER_COUNT);
 
@@ -366,18 +435,18 @@ int main(void)
                switch(Button_Event.button)
                {
                   // TODO: Confirm if other controllers map buttons on based name or position.
-                  case SDL_GAMEPAD_BUTTON_SOUTH:          { Sdl_Process_Button(&Controller->Action_Down, Button_Event.down); } break;
-                  case SDL_GAMEPAD_BUTTON_EAST:           { Sdl_Process_Button(&Controller->Action_Right, Button_Event.down); } break;
-                  case SDL_GAMEPAD_BUTTON_WEST:           { Sdl_Process_Button(&Controller->Action_Left, Button_Event.down); } break;
-                  case SDL_GAMEPAD_BUTTON_NORTH:          { Sdl_Process_Button(&Controller->Action_Up, Button_Event.down); } break;
-                  case SDL_GAMEPAD_BUTTON_DPAD_UP:        { Sdl_Process_Button(&Controller->Move_Up, Button_Event.down); } break;
-                  case SDL_GAMEPAD_BUTTON_DPAD_DOWN:      { Sdl_Process_Button(&Controller->Move_Down, Button_Event.down); } break;
-                  case SDL_GAMEPAD_BUTTON_DPAD_LEFT:      { Sdl_Process_Button(&Controller->Move_Left, Button_Event.down); } break;
-                  case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:     { Sdl_Process_Button(&Controller->Move_Right, Button_Event.down); } break;
-                  case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER:  { Sdl_Process_Button(&Controller->Shoulder_Left, Button_Event.down); } break;
-                  case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: { Sdl_Process_Button(&Controller->Shoulder_Right, Button_Event.down); } break;
-                  case SDL_GAMEPAD_BUTTON_START:          { Sdl_Process_Button(&Controller->Start, Button_Event.down); } break;
-                  case SDL_GAMEPAD_BUTTON_BACK:           { Sdl_Process_Button(&Controller->Back, Button_Event.down); } break;
+                  case SDL_GAMEPAD_BUTTON_SOUTH:          { Sdl3_Process_Button(&Controller->Action_Down, Button_Event.down); } break;
+                  case SDL_GAMEPAD_BUTTON_EAST:           { Sdl3_Process_Button(&Controller->Action_Right, Button_Event.down); } break;
+                  case SDL_GAMEPAD_BUTTON_WEST:           { Sdl3_Process_Button(&Controller->Action_Left, Button_Event.down); } break;
+                  case SDL_GAMEPAD_BUTTON_NORTH:          { Sdl3_Process_Button(&Controller->Action_Up, Button_Event.down); } break;
+                  case SDL_GAMEPAD_BUTTON_DPAD_UP:        { Sdl3_Process_Button(&Controller->Move_Up, Button_Event.down); } break;
+                  case SDL_GAMEPAD_BUTTON_DPAD_DOWN:      { Sdl3_Process_Button(&Controller->Move_Down, Button_Event.down); } break;
+                  case SDL_GAMEPAD_BUTTON_DPAD_LEFT:      { Sdl3_Process_Button(&Controller->Move_Left, Button_Event.down); } break;
+                  case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:     { Sdl3_Process_Button(&Controller->Move_Right, Button_Event.down); } break;
+                  case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER:  { Sdl3_Process_Button(&Controller->Shoulder_Left, Button_Event.down); } break;
+                  case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: { Sdl3_Process_Button(&Controller->Shoulder_Right, Button_Event.down); } break;
+                  case SDL_GAMEPAD_BUTTON_START:          { Sdl3_Process_Button(&Controller->Start, Button_Event.down); } break;
+                  case SDL_GAMEPAD_BUTTON_BACK:           { Sdl3_Process_Button(&Controller->Back, Button_Event.down); } break;
                }
             } break;
 
@@ -401,10 +470,10 @@ int main(void)
                      {
                         for(int Gamepad_Index = 1; Gamepad_Index < GAME_CONTROLLER_COUNT; ++Gamepad_Index)
                         {
-                           if(!Sdl.Gamepads[Gamepad_Index])
+                           if(!Sdl3.Gamepads[Gamepad_Index])
                            {
-                              Sdl.Gamepads[Gamepad_Index] = SDL_OpenGamepad(ID);
-                              if(Sdl.Gamepads[Gamepad_Index])
+                              Sdl3.Gamepads[Gamepad_Index] = SDL_OpenGamepad(ID);
+                              if(Sdl3.Gamepads[Gamepad_Index])
                               {
                                  Input->Controllers[Gamepad_Index].Connected = true;
                                  SDL_Log("Gamepad added to slot %d.", Gamepad_Index);
@@ -422,14 +491,14 @@ int main(void)
                   {
                      SDL_assert(Gamepad_Event.type == SDL_EVENT_GAMEPAD_REMOVED);
 
-                     int Gamepad_Index = Sdl_Get_Gamepad_Index(ID);
+                     int Gamepad_Index = Sdl3_Get_Gamepad_Index(ID);
                      SDL_assert(Gamepad_Index > 0);
                      SDL_assert(Gamepad_Index < GAME_CONTROLLER_COUNT);
-                     SDL_assert(Sdl.Gamepads[Gamepad_Index]);
+                     SDL_assert(Sdl3.Gamepads[Gamepad_Index]);
 
-                     SDL_CloseGamepad(Sdl.Gamepads[Gamepad_Index]);
+                     SDL_CloseGamepad(Sdl3.Gamepads[Gamepad_Index]);
 
-                     Sdl.Gamepads[Gamepad_Index] = 0;
+                     Sdl3.Gamepads[Gamepad_Index] = 0;
                      Input->Controllers[Gamepad_Index].Connected = false;
 
                      SDL_Log("Gamepad removed from slot %d.", Gamepad_Index);
@@ -448,22 +517,22 @@ int main(void)
          game_controller *Controller = Input->Controllers + Gamepad_Index;
          if(Controller->Connected)
          {
-            SDL_Gamepad *Gamepad = Sdl.Gamepads[Gamepad_Index];
+            SDL_Gamepad *Gamepad = Sdl3.Gamepads[Gamepad_Index];
 
-            Controller->Stick_Left_X  = Sdl_Process_Stick(Gamepad, SDL_GAMEPAD_AXIS_LEFTX);
-            Controller->Stick_Left_Y  = Sdl_Process_Stick(Gamepad, SDL_GAMEPAD_AXIS_LEFTY);
-            Controller->Stick_Right_X = Sdl_Process_Stick(Gamepad, SDL_GAMEPAD_AXIS_RIGHTX);
-            Controller->Stick_Right_Y = Sdl_Process_Stick(Gamepad, SDL_GAMEPAD_AXIS_RIGHTY);
+            Controller->Stick_Left_X  = Sdl3_Process_Stick(Gamepad, SDL_GAMEPAD_AXIS_LEFTX);
+            Controller->Stick_Left_Y  = Sdl3_Process_Stick(Gamepad, SDL_GAMEPAD_AXIS_LEFTY);
+            Controller->Stick_Right_X = Sdl3_Process_Stick(Gamepad, SDL_GAMEPAD_AXIS_RIGHTX);
+            Controller->Stick_Right_Y = Sdl3_Process_Stick(Gamepad, SDL_GAMEPAD_AXIS_RIGHTY);
 
-            Controller->Trigger_Left  = Sdl_Process_Trigger(Gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER);
-            Controller->Trigger_Right = Sdl_Process_Trigger(Gamepad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER);
+            Controller->Trigger_Left  = Sdl3_Process_Trigger(Gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER);
+            Controller->Trigger_Right = Sdl3_Process_Trigger(Gamepad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER);
          }
       }
 
       int Dst_Width, Dst_Height;
-      SDL_GetCurrentRenderOutputSize(Sdl.Renderer, &Dst_Width, &Dst_Height);
+      SDL_GetCurrentRenderOutputSize(Sdl3.Renderer, &Dst_Width, &Dst_Height);
 
-      float Src_Aspect = (float)Texture_Width / (float)Texture_Height;
+      float Src_Aspect = (float)Sdl3.Backbuffer_Width / (float)Sdl3.Backbuffer_Height;
       float Dst_Aspect = (float)Dst_Width / (float)Dst_Height;
       SDL_FRect Dst_Rect = {0, 0, (float)Dst_Width, (float)Dst_Height};
       if(Src_Aspect > Dst_Aspect)
@@ -487,13 +556,13 @@ int main(void)
       Input->Normalized_Mouse_Y = (2.0f * (Raw_Mouse_Y - Dst_Rect.y) / Dst_Rect.h) - 1.0f;
 
       // Update game state.
-      Update(Memory, Input, &Renderer, &Work_Queue, Sdl.Actual_Frame_Seconds);
+      Update(Memory, Input, &Renderer, &Work_Queue, Sdl3.Actual_Frame_Seconds);
 
       // Fill audio.
       size Bytes_Per_Sample = AUDIO_CHANNEL_COUNT * sizeof(*Audio_Output.Samples);
       size Max_Audio_Output_Size = 2048 * Bytes_Per_Sample;
 
-      int Bytes_Queued = SDL_GetAudioStreamQueued(Sdl.Audio_Stream);
+      int Bytes_Queued = SDL_GetAudioStreamQueued(Sdl3.Audio_Stream);
       if(Bytes_Queued < 0)
       {
          SDL_Log("Failed to query audio queue size: %s", SDL_GetError());
@@ -503,54 +572,51 @@ int main(void)
          Audio_Output.Sample_Count = Max_Audio_Output_Size / Bytes_Per_Sample;
          Mix_Audio_Output(Memory, &Audio_Output);
 
-         if(!SDL_PutAudioStreamData(Sdl.Audio_Stream, Audio_Output.Samples, Max_Audio_Output_Size))
+         if(!SDL_PutAudioStreamData(Sdl3.Audio_Stream, Audio_Output.Samples, Max_Audio_Output_Size))
          {
             SDL_Log("Failed to fill audio stream: %s", SDL_GetError());
          }
       }
 
       // Render frame.
-      SDL_SetRenderDrawColor(Sdl.Renderer, 0, 0, 0, 255);
-      SDL_RenderClear(Sdl.Renderer);
-
-      void *Backbuffer_Memory = Renderer.Backbuffer.Memory;
-      size Backbuffer_Size = Renderer.Backbuffer.Width * sizeof(*Renderer.Backbuffer.Memory);
-      SDL_UpdateTexture(Sdl.Texture, 0, Backbuffer_Memory, Backbuffer_Size);
-      SDL_RenderTexture(Sdl.Renderer, Sdl.Texture, 0, &Dst_Rect);
-      SDL_RenderPresent(Sdl.Renderer);
+#if USING_OPENGL
+      Sdl3_Display_With_OpenGL();
+#else
+      Sdl3_Display_With_Software_Renderer(&Renderer, Dst_Rect);
+#endif
 
       // End of frame.
       Input_Index++;
       if(Input_Index == Array_Count(Inputs)) Input_Index = 0;
       End_Frame_Input(Input, Inputs + Input_Index);
 
-      Uint64 Delta = SDL_GetPerformanceCounter() - Sdl.Frame_Start;
-      float Actual_Frame_Seconds = (float)Delta / (float)Sdl.Frequency;
+      Uint64 Delta = SDL_GetPerformanceCounter() - Sdl3.Frame_Start;
+      float Actual_Frame_Seconds = (float)Delta / (float)Sdl3.Frequency;
 
       int Sleep_ms = 0;
-      if(Actual_Frame_Seconds < Sdl.Target_Frame_Seconds)
+      if(Actual_Frame_Seconds < Sdl3.Target_Frame_Seconds)
       {
-         Sleep_ms = (int)((Sdl.Target_Frame_Seconds - Actual_Frame_Seconds) * 1000.0f) - 1;
+         Sleep_ms = (int)((Sdl3.Target_Frame_Seconds - Actual_Frame_Seconds) * 1000.0f) - 1;
          if(Sleep_ms > 0)
          {
             SDL_Delay(Sleep_ms);
          }
       }
-      while(Actual_Frame_Seconds < Sdl.Target_Frame_Seconds)
+      while(Actual_Frame_Seconds < Sdl3.Target_Frame_Seconds)
       {
-         Uint64 Delta = SDL_GetPerformanceCounter() - Sdl.Frame_Start;
-         Actual_Frame_Seconds = (float)Delta / (float)Sdl.Frequency;
+         Uint64 Delta = SDL_GetPerformanceCounter() - Sdl3.Frame_Start;
+         Actual_Frame_Seconds = (float)Delta / (float)Sdl3.Frequency;
       }
 
-      Sdl.Frame_Start = SDL_GetPerformanceCounter();
-      Sdl.Actual_Frame_Seconds = Actual_Frame_Seconds;
-      Sdl.Frame_Count++;
+      Sdl3.Frame_Start = SDL_GetPerformanceCounter();
+      Sdl3.Actual_Frame_Seconds = Actual_Frame_Seconds;
+      Sdl3.Frame_Count++;
 
 #     if DEBUG && 0
-      int FPS = (int)(Sdl.Monitor_Refresh_Rate + 0.5f);
-      if((Sdl.Frame_Count % FPS) == 0)
+      int FPS = (int)(Sdl3.Monitor_Refresh_Rate + 0.5f);
+      if((Sdl3.Frame_Count % FPS) == 0)
       {
-         float Frame_ms = Sdl.Actual_Frame_Seconds * 1000.0f;
+         float Frame_ms = Sdl3.Actual_Frame_Seconds * 1000.0f;
          SDL_Log("Frame time: % .3fms (slept %dms)", Frame_ms, Sleep_ms);
       }
 #     endif

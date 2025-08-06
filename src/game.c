@@ -54,7 +54,11 @@ typedef struct {
 #include "text.c"
 #include "render.c"
 #include "audio.c"
-#include "renderer_software.c"
+#if USING_OPENGL
+#   include "renderer_opengl.c"
+#else
+#   include "renderer_software.c"
+#endif
 #include "debug.c"
 
 static void Display_Textbox(game_state *Game_State, renderer *Renderer, string Text)

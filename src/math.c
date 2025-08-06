@@ -38,6 +38,18 @@ static float Clamp_01(float Value)
    return(Result);
 }
 
+static float Map_Normal(float Value, float Min, float Max)
+{
+   float Result = (Value - Min) / (Max - Min);
+   return(Result);
+}
+
+static float Map_Binormal(float Value, float Min, float Max)
+{
+   float Result = (2.0f * Map_Normal(Value, Min, Max)) - 1.0f;
+   return(Result);
+}
+
 // Vector Math:
 
 static vec2 Add2(vec2 A, vec2 B)
