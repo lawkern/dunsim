@@ -54,11 +54,8 @@ typedef struct {
 #include "text.c"
 #include "render.c"
 #include "audio.c"
-#if USING_OPENGL
-#   include "renderer_opengl.c"
-#else
-#   include "renderer_software.c"
-#endif
+#include "renderer_software.c"
+#include "renderer_opengl.c"
 #include "debug.c"
 
 static void Display_Textbox(game_state *Game_State, renderer *Renderer, string Text)
@@ -605,6 +602,4 @@ UPDATE(Update)
    {
       Display_Textbox(Game_State, Renderer, Game_State->Textbox_Dialogue[Game_State->Active_Textbox_Index]);
    }
-
-   Render(Renderer);
 }

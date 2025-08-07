@@ -116,6 +116,7 @@ static struct {
 
    int Backbuffer_Width;
    int Backbuffer_Height;
+   renderer_backend Renderer_Backend;
    union
    {
       struct
@@ -203,7 +204,16 @@ static int Sdl3_Get_Gamepad_Index(SDL_JoystickID ID)
 
 static void Sdl3_Initialize_Software_Renderer(int Window_Width, int Window_Height)
 {
-   if(!SDL_CreateWindowAndRenderer("SDL Platform Build", Window_Width, Window_Height, 0, &Sdl3.Window, &Sdl3.Renderer))
+   if(Sdl3.Window)
+   {
+      SDL_DestroyWindow(Sdl3.Window);
+   }
+   if(Sdl3.Renderer)
+   {
+      SDL_DestroyRenderer(Sdl3.Renderer);
+   }
+
+   if(!SDL_CreateWindowAndRenderer("SDL Platform Build (Software)", Window_Width, Window_Height, 0, &Sdl3.Window, &Sdl3.Renderer))
    {
       SDL_Log("Failed to create window/renderer: %s", SDL_GetError());
       SDL_assert(0);
@@ -231,6 +241,15 @@ static void Sdl3_Initialize_Software_Renderer(int Window_Width, int Window_Heigh
 
 static void Sdl3_Initialize_OpenGL(int Window_Width, int Window_Height)
 {
+   if(Sdl3.Window)
+   {
+      SDL_DestroyWindow(Sdl3.Window);
+   }
+   if(Sdl3.OpenGL_Context)
+   {
+      SDL_GL_DestroyContext(Sdl3.OpenGL_Context);
+   }
+
    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
@@ -260,10 +279,14 @@ static void Sdl3_Initialize_OpenGL(int Window_Width, int Window_Height)
    SDL_GL_SetSwapInterval(1);
 }
 
-static void Sdl3_Display_With_Software_Renderer(renderer *Renderer, SDL_FRect Dst_Rect)
+static void Sdl3_Display_With_Software_Renderer(renderer *Renderer)
 {
    SDL_SetRenderDrawColor(Sdl3.Renderer, 0, 0, 0, 255);
    SDL_RenderClear(Sdl3.Renderer);
+
+   Render_With_Software(Renderer);
+
+   SDL_FRect Dst_Rect = {Renderer->Bounds_X, Renderer->Bounds_Y, Renderer->Bounds_Width, Renderer->Bounds_Height};
 
    void *Backbuffer_Memory = Renderer->Backbuffer.Memory;
    size Backbuffer_Size = Renderer->Backbuffer.Width * sizeof(*Renderer->Backbuffer.Memory);
@@ -272,17 +295,18 @@ static void Sdl3_Display_With_Software_Renderer(renderer *Renderer, SDL_FRect Ds
    SDL_RenderPresent(Sdl3.Renderer);
 }
 
-static void Sdl3_Display_With_OpenGL(void)
+static void Sdl3_Display_With_OpenGL(renderer *Renderer)
 {
-   glViewport(0, 0, Sdl3.Backbuffer_Width, Sdl3.Backbuffer_Height);
+   Render_With_OpenGL(Renderer);
+
    SDL_GL_SwapWindow(Sdl3.Window);
 }
 
 int main(void)
 {
    // Initialize SDL.
-   int Window_Width = 640;
-   int Window_Height = 480;
+   int Resolution_Width = 640;
+   int Resolution_Height = 480;
 
    if(!SDL_Init(SDL_INIT_VIDEO|SDL_INIT_AUDIO|SDL_INIT_GAMEPAD))
    {
@@ -290,11 +314,20 @@ int main(void)
       SDL_assert(0);
    }
 
-#if USING_OPENGL
-   Sdl3_Initialize_OpenGL(Window_Width, Window_Height);
-#else
-   Sdl3_Initialize_Software_Renderer(Window_Width, Window_Height);
-#endif
+   Sdl3.Renderer_Backend = Renderer_Backend_Software;
+   // Sdl3.Renderer_Backend = Renderer_Backend_OpenGL;
+   switch(Sdl3.Renderer_Backend)
+   {
+      case Renderer_Backend_Software: {
+         Sdl3_Initialize_Software_Renderer(Resolution_Width, Resolution_Height);
+      } break;
+
+      case Renderer_Backend_OpenGL: {
+         Sdl3_Initialize_OpenGL(Resolution_Width, Resolution_Height);
+      } break;
+
+      default: { SDL_assert(0); };
+   }
 
    Sdl3.Frequency = SDL_GetPerformanceFrequency();
 
@@ -393,6 +426,21 @@ int main(void)
                               bool Is_Fullscreen = (SDL_GetWindowFlags(Sdl3.Window) & SDL_WINDOW_FULLSCREEN);
                               SDL_SetWindowFullscreen(Sdl3.Window, Is_Fullscreen ? 0 : SDL_WINDOW_FULLSCREEN);
                            }
+                        }
+                     } break;
+
+                     case SDLK_R: {
+                        if(Key_Event.down)
+                        {
+                           Sdl3.Renderer_Backend = Renderer_Backend_Software;
+                           Sdl3_Initialize_Software_Renderer(Resolution_Width, Resolution_Height);
+                        }
+                     } break;
+                     case SDLK_O: {
+                        if(Key_Event.down)
+                        {
+                           Sdl3.Renderer_Backend = Renderer_Backend_OpenGL;
+                           Sdl3_Initialize_OpenGL(Resolution_Width, Resolution_Height);
                         }
                      } break;
 
@@ -529,31 +577,36 @@ int main(void)
          }
       }
 
-      int Dst_Width, Dst_Height;
-      SDL_GetCurrentRenderOutputSize(Sdl3.Renderer, &Dst_Width, &Dst_Height);
+      int Window_Width, Window_Height;
+      SDL_GetWindowSizeInPixels(Sdl3.Window, &Window_Width, &Window_Height);
 
       float Src_Aspect = (float)Sdl3.Backbuffer_Width / (float)Sdl3.Backbuffer_Height;
-      float Dst_Aspect = (float)Dst_Width / (float)Dst_Height;
-      SDL_FRect Dst_Rect = {0, 0, (float)Dst_Width, (float)Dst_Height};
+      float Dst_Aspect = (float)Window_Width / (float)Window_Height;
+
+      Renderer.Bounds_X = 0;
+      Renderer.Bounds_Y = 0;
+      Renderer.Bounds_Width = Window_Width;
+      Renderer.Bounds_Height = Window_Height;
+
       if(Src_Aspect > Dst_Aspect)
       {
          // NOTE: Bars on top and bottom.
-         int Bar_Height = (int)(0.5f * (Dst_Height - (Dst_Width / Src_Aspect)));
-         Dst_Rect.y += Bar_Height;
-         Dst_Rect.h -= (Bar_Height * 2);
+         int Bar_Height = (int)(0.5f * (Window_Height - (Window_Width / Src_Aspect)));
+         Renderer.Bounds_Y += Bar_Height;
+         Renderer.Bounds_Height -= (Bar_Height * 2);
       }
       else if(Src_Aspect < Dst_Aspect)
       {
          // NOTE: Bars on left and right;
-         int Bar_Width = (int)(0.5f * (Dst_Width - (Dst_Height * Src_Aspect)));
-         Dst_Rect.x += Bar_Width;
-         Dst_Rect.w -= (Bar_Width * 2);
+         int Bar_Width = (int)(0.5f * (Window_Width - (Window_Height * Src_Aspect)));
+         Renderer.Bounds_X += Bar_Width;
+         Renderer.Bounds_Width -= (Bar_Width * 2);
       }
 
       float Raw_Mouse_X, Raw_Mouse_Y;
       SDL_GetMouseState(&Raw_Mouse_X, &Raw_Mouse_Y);
-      Input->Normalized_Mouse_X = (2.0f * (Raw_Mouse_X - Dst_Rect.x) / Dst_Rect.w) - 1.0f;
-      Input->Normalized_Mouse_Y = (2.0f * (Raw_Mouse_Y - Dst_Rect.y) / Dst_Rect.h) - 1.0f;
+      Input->Normalized_Mouse_X = Map_Binormal(Raw_Mouse_X, Renderer.Bounds_X, Renderer.Bounds_Width);
+      Input->Normalized_Mouse_Y = Map_Binormal(Raw_Mouse_Y, Renderer.Bounds_Y, Renderer.Bounds_Height);
 
       // Update game state.
       Update(Memory, Input, &Renderer, &Work_Queue, Sdl3.Actual_Frame_Seconds);
@@ -579,11 +632,18 @@ int main(void)
       }
 
       // Render frame.
-#if USING_OPENGL
-      Sdl3_Display_With_OpenGL();
-#else
-      Sdl3_Display_With_Software_Renderer(&Renderer, Dst_Rect);
-#endif
+      switch(Sdl3.Renderer_Backend)
+      {
+         case Renderer_Backend_Software: {
+            Sdl3_Display_With_Software_Renderer(&Renderer);
+         } break;
+
+         case Renderer_Backend_OpenGL: {
+            Sdl3_Display_With_OpenGL(&Renderer);
+         } break;
+
+         default: { SDL_assert(0); };
+      }
 
       // End of frame.
       Input_Index++;

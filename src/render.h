@@ -5,6 +5,8 @@
 typedef enum {
    Renderer_Backend_Software,
    Renderer_Backend_OpenGL,
+
+   Renderer_Backend_Count,
 } renderer_backend;
 
 typedef struct {
@@ -56,6 +58,11 @@ typedef enum {
 
 typedef struct {
    texture Backbuffer;
+   float Bounds_X;
+   float Bounds_Y;
+   float Bounds_Width;
+   float Bounds_Height;
+
    float Pixels_Per_Meter;
    float Screen_Width_Meters;
    float Screen_Height_Meters;
@@ -65,13 +72,6 @@ typedef struct {
 
 // Renderer API:
 #define DRAW_CLEAR(Name) void Name(texture Destination, vec4 Color)
-static DRAW_CLEAR(Draw_Clear);
-
 #define DRAW_RECTANGLE(Name) void Name(texture Destination, float X, float Y, float Width, float Height, vec4 Color)
-static DRAW_RECTANGLE(Draw_Rectangle);
-
 #define DRAW_TEXTURE(Name) void Name(texture Destination, texture Source, float X, float Y, float Width, float Height)
-static DRAW_TEXTURE(Draw_Texture);
-
 #define DRAW_TEXTURED_QUAD(Name) void Name(texture Destination, texture Source, vec2 Origin, vec2 X_Axis, vec2 Y_Axis)
-static DRAW_TEXTURED_QUAD(Draw_Textured_Quad);

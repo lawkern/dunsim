@@ -22,7 +22,7 @@ static inline vec4 Unpack_Color(u32 Color)
    return(Result);
 }
 
-static DRAW_CLEAR(Draw_Clear)
+static DRAW_CLEAR(Software_Draw_Clear)
 {
    BEGIN_PROFILE(Draw_Clear);
 
@@ -58,7 +58,7 @@ static DRAW_CLEAR(Draw_Clear)
    END_PROFILE(Draw_Clear);
 }
 
-static DRAW_RECTANGLE(Draw_Rectangle)
+static DRAW_RECTANGLE(Software_Draw_Rectangle)
 {
    BEGIN_PROFILE(Draw_Rectangle);
 
@@ -81,7 +81,7 @@ static DRAW_RECTANGLE(Draw_Rectangle)
    END_PROFILE(Draw_Rectangle);
 }
 
-static DRAW_TEXTURE(Draw_Texture)
+static DRAW_TEXTURE(Software_Draw_Texture)
 {
    BEGIN_PROFILE(Draw_Texture);
 
@@ -131,7 +131,7 @@ static DRAW_TEXTURE(Draw_Texture)
    END_PROFILE(Draw_Texture);
 }
 
-static DRAW_TEXTURED_QUAD(Draw_Textured_Quad)
+static DRAW_TEXTURED_QUAD(Software_Draw_Textured_Quad)
 {
    BEGIN_PROFILE(Draw_Textured_Quad);
 
@@ -235,4 +235,59 @@ static DRAW_TEXTURED_QUAD(Draw_Textured_Quad)
    }
 
    END_PROFILE(Draw_Textured_Quad);
+}
+
+static void Render_With_Software(renderer *Renderer)
+{
+   texture Backbuffer = Renderer->Backbuffer;
+   float Pixels_Per_Meter = Renderer->Pixels_Per_Meter;
+
+   for(int Queue_Index = 0; Queue_Index < Array_Count(Renderer->Queues); ++Queue_Index)
+   {
+      render_queue *Queue = Renderer->Queues[Queue_Index];
+      for(int Command_Index = 0; Command_Index < Queue->Command_Count; ++Command_Index)
+      {
+         render_command *Command = Queue->Commands + Command_Index;
+         switch(Command->Type)
+         {
+            case Render_Command_Clear: {
+               Software_Draw_Clear(Backbuffer, Command->Color);
+            } break;
+
+            case Render_Command_Rectangle: {
+               Software_Draw_Rectangle(Backbuffer, Command->X, Command->Y, Command->Width, Command->Height, Command->Color);
+            } break;
+
+            case Render_Command_Texture: {
+               Software_Draw_Texture(Backbuffer, Command->Texture, Command->X, Command->Y, Command->Width, Command->Height);
+            } break;
+
+            case Render_Command_Textured_Quad: {
+               Software_Draw_Textured_Quad(Backbuffer, Command->Texture, Command->Origin, Command->X_Axis, Command->Y_Axis);
+            } break;
+
+            case Render_Command_Debug_Basis: {
+               vec2 Origin = Command->Origin;
+               vec2 X_Axis = Command->X_Axis;
+               vec2 Y_Axis = Command->Y_Axis;
+
+               Software_Draw_Textured_Quad(Backbuffer, Command->Texture, Origin, X_Axis, Y_Axis);
+
+               vec2 Origin0 = Origin;
+               vec2 Origin1 = Add2(Origin, X_Axis);
+               vec2 Origin2 = Add2(Origin, Y_Axis);
+               float Dim = 5;
+
+               Software_Draw_Rectangle(Backbuffer, Origin0.X, Origin0.Y, Dim, Dim, Vec4(1, 1, 0, 1));
+               Software_Draw_Rectangle(Backbuffer, Origin1.X, Origin1.Y, Dim, Dim, Vec4(1, 0, 0, 1));
+               Software_Draw_Rectangle(Backbuffer, Origin2.X, Origin2.Y, Dim, Dim, Vec4(0, 1, 0, 1));
+            } break;
+
+            default: {
+               Assert(0);
+            } break;
+         }
+      }
+      Queue->Command_Count = 0;
+   }
 }
