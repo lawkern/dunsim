@@ -30,11 +30,11 @@ static void Display_Debug_Overlay(game_state *Game_State, game_input *Input, ren
    Text.Font = &Game_State->Fixed_Font;
    Text.Size = Text_Size_Medium;
    Debug_Text_Line(&Text, "Frame Time: %3.3fms", Frame_Seconds*1000.0f);
+   Debug_Text_Line(&Text, "Mouse: {%0.2f, %0.2f}", Input->Binormal_Mouse_X, Input->Binormal_Mouse_Y);
 #if 0
    Debug_Text_Line(&Text, "Permanent: %zuMB", (Game_State->Permanent.End - Game_State->Permanent.Begin) / Megabytes(1));
    Debug_Text_Line(&Text, "Map: %zuMB", (Game_State->Map.Arena.End - Game_State->Map.Arena.Begin) / Megabytes(1));
    Debug_Text_Line(&Text, "Scratch: %zuMB", (Game_State->Scratch.End - Game_State->Scratch.Begin) / Megabytes(1));
-   Debug_Text_Line(&Text, "Mouse: {%0.2f, %0.2f}", Input->Normalized_Mouse_X, Input->Normalized_Mouse_Y);
    if(Game_State->Selected_Debug_Entity_ID)
    {
       entity *Selected = Get_Entity(Game_State, Game_State->Selected_Debug_Entity_ID);

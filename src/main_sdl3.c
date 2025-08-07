@@ -314,8 +314,8 @@ int main(void)
       SDL_assert(0);
    }
 
-   Sdl3.Renderer_Backend = Renderer_Backend_Software;
-   // Sdl3.Renderer_Backend = Renderer_Backend_OpenGL;
+   // Sdl3.Renderer_Backend = Renderer_Backend_Software;
+   Sdl3.Renderer_Backend = Renderer_Backend_OpenGL;
    switch(Sdl3.Renderer_Backend)
    {
       case Renderer_Backend_Software: {
@@ -605,8 +605,14 @@ int main(void)
 
       float Raw_Mouse_X, Raw_Mouse_Y;
       SDL_GetMouseState(&Raw_Mouse_X, &Raw_Mouse_Y);
-      Input->Normalized_Mouse_X = Map_Binormal(Raw_Mouse_X, Renderer.Bounds_X, Renderer.Bounds_Width);
-      Input->Normalized_Mouse_Y = Map_Binormal(Raw_Mouse_Y, Renderer.Bounds_Y, Renderer.Bounds_Height);
+
+      float Min_Mouse_X = Renderer.Bounds_X;
+      float Min_Mouse_Y = Renderer.Bounds_Y;
+      float Max_Mouse_X = Renderer.Bounds_X + Renderer.Bounds_Width - 1.0f;
+      float Max_Mouse_Y = Renderer.Bounds_Y + Renderer.Bounds_Height - 1.0f;
+
+      Input->Binormal_Mouse_X = Map_Binormal(Raw_Mouse_X, Min_Mouse_X, Max_Mouse_X);
+      Input->Binormal_Mouse_Y = Map_Binormal(Raw_Mouse_Y, Min_Mouse_Y, Max_Mouse_Y);
 
       // Update game state.
       Update(Memory, Input, &Renderer, &Work_Queue, Sdl3.Actual_Frame_Seconds);

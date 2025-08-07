@@ -461,8 +461,8 @@ UPDATE(Update)
 
    Push_Clear(Renderer, Palette[0]);
 
-   float Mouse_X = Input->Normalized_Mouse_X * Renderer->Screen_Width_Meters * 0.5f;
-   float Mouse_Y = Input->Normalized_Mouse_Y * Renderer->Screen_Height_Meters * 0.5f;
+   float Mouse_X = Input->Binormal_Mouse_X * Renderer->Screen_Width_Meters * 0.5f;
+   float Mouse_Y = Input->Binormal_Mouse_Y * Renderer->Screen_Height_Meters * 0.5f;
 
    int Chunk_Z = Camera_Position.Z;
    for(int Chunk_Y = Camera_Chunk_Position.Y-1; Chunk_Y <= Camera_Chunk_Position.Y+1; ++Chunk_Y)

@@ -62,8 +62,8 @@ typedef struct {
    float Frame_Seconds;
    game_controller Controllers[GAME_CONTROLLER_COUNT];
 
-   float Normalized_Mouse_X;
-   float Normalized_Mouse_Y;
+   float Binormal_Mouse_X;
+   float Binormal_Mouse_Y;
    game_button Mouse_Button_Left;
    game_button Mouse_Button_Middle;
    game_button Mouse_Button_Right;
