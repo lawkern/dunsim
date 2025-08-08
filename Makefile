@@ -1,4 +1,4 @@
-CFLAGS = -g3 -Wall -Wextra -Wno-unused-function -Wno-unused-variable -Wno-unused-parameter -Wno-multichar -Wno-missing-braces
+CFLAGS = -g3 -Wall -Wextra -Wno-unused-function -Wno-unused-variable -Wno-unused-parameter -Wno-multichar -Wno-missing-braces -fno-strict-aliasing
 LDLIBS = -lm -lGL
 
 compile:
