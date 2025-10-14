@@ -2,6 +2,7 @@ CFLAGS = -g3 -Wall -Wextra -Wno-unused-function -Wno-unused-variable -Wno-unused
 LDLIBS = -lm -lGL
 
 compile:
+	mkdir -p build
 	$(CC) -o build/ctime src/external/ctime.c
 
 	build/ctime -begin build/debug.ctm

@@ -133,7 +133,6 @@ static struct {
    Uint64 Frame_Start;
    Uint64 Frame_Count;
 
-   float Monitor_Refresh_Rate;
    float Target_Frame_Seconds;
    float Actual_Frame_Seconds;
 
@@ -302,6 +301,25 @@ static void Sdl3_Display_With_OpenGL(renderer *Renderer)
    SDL_GL_SwapWindow(Sdl3.Window);
 }
 
+static float Sdl3_Determine_Target_Frame_Seconds(SDL_Window *Window)
+{
+   // NOTE: For now we just match the refresh rate of the current display.
+   int Display_ID = SDL_GetDisplayForWindow(Sdl3.Window);
+   const SDL_DisplayMode *Display_Mode = SDL_GetCurrentDisplayMode(Display_ID);
+
+   float Monitor_Refresh_Rate = 60.0f;
+   if(Display_Mode && Display_Mode->refresh_rate > 0)
+   {
+      Monitor_Refresh_Rate = Display_Mode->refresh_rate;
+   }
+   float Result = 1.0f / Monitor_Refresh_Rate;
+
+   SDL_Log("Monitor refresh rate: %02f", Monitor_Refresh_Rate);
+   SDL_Log("Target frame time: %0.03fms", Result * 1000.0f);
+
+   return(Result);
+}
+
 int main(void)
 {
    // Initialize SDL.
@@ -330,16 +348,7 @@ int main(void)
    }
 
    Sdl3.Frequency = SDL_GetPerformanceFrequency();
-
-   int Display_ID = SDL_GetDisplayForWindow(Sdl3.Window);
-   const SDL_DisplayMode *Display_Mode = SDL_GetCurrentDisplayMode(Display_ID);
-   Sdl3.Monitor_Refresh_Rate = (Display_Mode && Display_Mode->refresh_rate > 0)
-      ? Display_Mode->refresh_rate
-      : 60.0f;
-   Sdl3.Target_Frame_Seconds = 1.0f / Sdl3.Monitor_Refresh_Rate;
-
-   SDL_Log("Monitor refresh rate: %02f", Sdl3.Monitor_Refresh_Rate);
-   SDL_Log("Target frame time: %0.03fms", Sdl3.Target_Frame_Seconds * 1000.0f);
+   Sdl3.Target_Frame_Seconds = Sdl3_Determine_Target_Frame_Seconds(Sdl3.Window);
 
    SDL_AudioSpec Audio_Spec = {0};
    Audio_Spec.format = SDL_AUDIO_S16;
@@ -400,6 +409,14 @@ int main(void)
          {
             case SDL_EVENT_QUIT: {
                Running = false;
+            } break;
+
+            case SDL_EVENT_WINDOW_DISPLAY_CHANGED: {
+               // TODO: I'm not confident that this is the correct event, since
+               // moving the window between monitors in Sway sometimes does not
+               // trigger this event until "focus" also shifts to the new
+               // monitor.
+               Sdl3.Target_Frame_Seconds = Sdl3_Determine_Target_Frame_Seconds(Sdl3.Window);
             } break;
 
             case SDL_EVENT_KEY_UP:
